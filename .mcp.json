@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "oxidized": {
+      "command": "uv",
+      "args": [
+        "run",
+        "oxidized-mcp"
+      ]
+    }
+  }
+}
