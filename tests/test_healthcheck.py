@@ -1,5 +1,6 @@
 """The container healthcheck must ask the server itself, not just the port."""
 
+import contextlib
 import http.client
 import os
 import socket
@@ -156,43 +157,72 @@ def test_transport_from_dotenv_is_probed(monkeypatch, closed_port):
     assert healthcheck.main() == 1
 
 
-@pytest.mark.parametrize("bearer_token", ["secret", ""])
+# One server with bearer auth, one without.
+REAL_SERVER_BEARER_TOKENS = ["secret", ""]
+
+
+def _free_ports(count: int) -> list[int]:
+    """Distinct free ports; every socket stays bound until all are picked."""
+    with contextlib.ExitStack() as stack:
+        socks = [stack.enter_context(socket.socket()) for _ in range(count)]
+        for sock in socks:
+            sock.bind(("127.0.0.1", 0))
+        return [sock.getsockname()[1] for sock in socks]
+
+
+@pytest.fixture(scope="module")
+def real_servers(tmp_path_factory) -> Iterator[dict[str, tuple[subprocess.Popen, int]]]:
+    """Start a server for every REAL_SERVER_BEARER_TOKENS entry at once.
+
+    Each one spends about 1.5 s importing before it listens; started one test
+    at a time, that wait was paid once per case.
+    """
+    ports = _free_ports(len(REAL_SERVER_BEARER_TOKENS))
+    servers: dict[str, tuple[subprocess.Popen, int]] = {}
+    try:
+        for bearer_token, port in zip(REAL_SERVER_BEARER_TOKENS, ports, strict=True):
+            env = {
+                **os.environ,
+                "OXIDIZED_URL": "https://oxidized.invalid",
+                "MCP_TRANSPORT": "http",
+                "MCP_HTTP_HOST": "127.0.0.1",
+                "MCP_HTTP_PORT": str(port),
+                "MCP_HTTP_BEARER_TOKEN": bearer_token,
+                "SENTRY_DSN": "",
+            }
+            server = subprocess.Popen(
+                [sys.executable, "-c", "import oxidized_mcp.server as s; s.main()"],
+                env=env,
+                cwd=tmp_path_factory.mktemp("server"),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            servers[bearer_token] = (server, port)
+        yield servers
+    finally:
+        for server, _ in servers.values():
+            server.terminate()
+        for server, _ in servers.values():
+            server.wait(timeout=10)
+
+
+@pytest.mark.parametrize("bearer_token", REAL_SERVER_BEARER_TOKENS)
 def test_real_server_health_endpoint_needs_no_token(
-    monkeypatch, closed_port, tmp_path, bearer_token
+    monkeypatch, real_servers, bearer_token
 ):
     """End to end: the server's /health answers the probe, bearer auth or not."""
-    port = closed_port
-    env = {
-        **os.environ,
-        "OXIDIZED_URL": "https://oxidized.invalid",
-        "MCP_TRANSPORT": "http",
-        "MCP_HTTP_HOST": "127.0.0.1",
-        "MCP_HTTP_PORT": str(port),
-        "MCP_HTTP_BEARER_TOKEN": bearer_token,
-        "SENTRY_DSN": "",
-    }
-    server = subprocess.Popen(
-        [sys.executable, "-c", "import oxidized_mcp.server as s; s.main()"],
-        env=env,
-        cwd=tmp_path,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    try:
-        _configure(monkeypatch, port)
-        deadline = time.monotonic() + 30
-        while healthcheck.main() != 0:
-            assert server.poll() is None, "server exited"
-            assert time.monotonic() < deadline, "server never became healthy"
-            time.sleep(0.05)
-        if bearer_token:
-            # The MCP endpoint itself still demands the token.
-            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-            try:
-                conn.request("POST", "/mcp", body="{}")
-                assert conn.getresponse().status == 401
-            finally:
-                conn.close()
-    finally:
-        server.terminate()
-        server.wait(timeout=10)
+    server, port = real_servers[bearer_token]
+    _configure(monkeypatch, port)
+    deadline = time.monotonic() + 30
+    while healthcheck.main() != 0:
+        assert server.poll() is None, "server exited"
+        assert time.monotonic() < deadline, "server never became healthy"
+        time.sleep(0.05)
+    if bearer_token:
+        # The MCP endpoint itself still demands the token.
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        try:
+            conn.request("POST", "/mcp", body="{}")
+            assert conn.getresponse().status == 401
+        finally:
+            conn.close()
