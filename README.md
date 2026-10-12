@@ -440,6 +440,17 @@ curl -H "Authorization: Bearer your-secret-token" \
 
 **Note**: The HTTP transport requires proper JSON-RPC formatting with `jsonrpc` and `id` fields. The server may also require session initialization for some operations.
 
+#### Health Endpoint
+
+Both HTTP transports (`sse` and `http`) serve `GET /health`, which answers `200 ok`
+when the server is handling requests. It needs no bearer token and does not
+contact Oxidized, so an Oxidized outage does not mark the MCP server unhealthy.
+The Docker image's `HEALTHCHECK` uses it:
+
+```sh
+curl http://localhost:8000/health
+```
+
 ## Oxidized Notes
 
 - **Version history** (`list_node_versions`, `get_node_version`, `diff_node_versions`) needs the `git` or `gitcrypt` output. With the `file` output Oxidized reports no versions.

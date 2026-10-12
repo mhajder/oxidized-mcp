@@ -7,9 +7,12 @@ import httpx2
 
 from oxidized_mcp.models import OxidizedConfig
 from oxidized_mcp.models import TransportConfig
+from oxidized_mcp.utils import env_int
+from oxidized_mcp.utils import http_host_from_env
+from oxidized_mcp.utils import http_port_from_env
 from oxidized_mcp.utils import parse_bool
-from oxidized_mcp.utils import parse_int
 from oxidized_mcp.utils import quote_path_segment
+from oxidized_mcp.utils import transport_from_env
 
 logger = logging.getLogger(__name__)
 
@@ -294,14 +297,6 @@ class OxidizedClient:
         return str(info.get("name") or name), resolved_group, full_name
 
 
-def _env_int(name: str, default: int) -> int:
-    """Read an integer env var; blank means unset, garbage names the variable."""
-    try:
-        return parse_int(os.getenv(name), default)
-    except ValueError as exc:
-        raise ValueError(f"{name} must be an integer, got {os.getenv(name)!r}") from exc
-
-
 def get_oxidized_config_from_env() -> OxidizedConfig:
     """Get Oxidized configuration from environment variables."""
     # Parse disabled tags from comma-separated string
@@ -318,23 +313,23 @@ def get_oxidized_config_from_env() -> OxidizedConfig:
         username=os.getenv("OXIDIZED_USERNAME", "").strip() or None,
         password=os.getenv("OXIDIZED_PASSWORD") or None,
         verify_ssl=parse_bool(os.getenv("OXIDIZED_VERIFY_SSL"), default=True),
-        timeout=_env_int("OXIDIZED_TIMEOUT", 30),
-        search_timeout=_env_int("OXIDIZED_SEARCH_TIMEOUT", 300),
+        timeout=env_int("OXIDIZED_TIMEOUT", 30),
+        search_timeout=env_int("OXIDIZED_SEARCH_TIMEOUT", 300),
         redact_node_vars=parse_bool(
             os.getenv("OXIDIZED_REDACT_NODE_VARS"), default=True
         ),
         read_only_mode=parse_bool(os.getenv("READ_ONLY_MODE"), default=False),
         disabled_tags=disabled_tags,
         rate_limit_enabled=parse_bool(os.getenv("RATE_LIMIT_ENABLED"), default=False),
-        rate_limit_max_requests=_env_int("RATE_LIMIT_MAX_REQUESTS", 60),
-        rate_limit_window_minutes=_env_int("RATE_LIMIT_WINDOW_MINUTES", 1),
+        rate_limit_max_requests=env_int("RATE_LIMIT_MAX_REQUESTS", 60),
+        rate_limit_window_minutes=env_int("RATE_LIMIT_WINDOW_MINUTES", 1),
         tool_search_enabled=parse_bool(os.getenv("TOOL_SEARCH_ENABLED"), default=False),
         tool_search_strategy=(
             "regex"
             if os.getenv("TOOL_SEARCH_STRATEGY", "bm25").lower() == "regex"
             else "bm25"
         ),
-        tool_search_max_results=_env_int("TOOL_SEARCH_MAX_RESULTS", 5),
+        tool_search_max_results=env_int("TOOL_SEARCH_MAX_RESULTS", 5),
     )
 
 
@@ -345,9 +340,9 @@ def get_transport_config_from_env() -> TransportConfig:
         http_bearer_token = http_bearer_token.strip() or None
 
     return TransportConfig(
-        transport_type=os.getenv("MCP_TRANSPORT", "stdio").lower(),
-        http_host=os.getenv("MCP_HTTP_HOST", "127.0.0.1"),
-        http_port=_env_int("MCP_HTTP_PORT", 8000),
+        transport_type=transport_from_env(),
+        http_host=http_host_from_env(),
+        http_port=http_port_from_env(),
         http_bearer_token=http_bearer_token,
     )
 

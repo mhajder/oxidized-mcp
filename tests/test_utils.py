@@ -1,9 +1,13 @@
 import pytest
 
+from oxidized_mcp.utils import env_int
+from oxidized_mcp.utils import http_host_from_env
+from oxidized_mcp.utils import http_port_from_env
 from oxidized_mcp.utils import parse_bool
 from oxidized_mcp.utils import parse_float
 from oxidized_mcp.utils import parse_int
 from oxidized_mcp.utils import quote_path_segment
+from oxidized_mcp.utils import transport_from_env
 
 
 @pytest.mark.parametrize(
@@ -62,3 +66,54 @@ def test_parse_int_rejects_garbage():
 )
 def test_parse_float(val, expected):
     assert parse_float(val, 1.0) == expected
+
+
+@pytest.fixture
+def _clean_transport_env(monkeypatch):
+    for name in ("MCP_TRANSPORT", "MCP_HTTP_HOST", "MCP_HTTP_PORT"):
+        monkeypatch.delenv(name, raising=False)
+
+
+@pytest.mark.usefixtures("_clean_transport_env")
+@pytest.mark.parametrize(
+    ("val", "expected"),
+    [(None, "stdio"), ("http", "http"), ("SSE", "sse"), ("", "")],
+)
+def test_transport_from_env(monkeypatch, val, expected):
+    if val is not None:
+        monkeypatch.setenv("MCP_TRANSPORT", val)
+    assert transport_from_env() == expected
+
+
+@pytest.mark.usefixtures("_clean_transport_env")
+@pytest.mark.parametrize(
+    ("val", "expected"),
+    [
+        (None, "127.0.0.1"),
+        ("0.0.0.0", "0.0.0.0"),  # noqa: S104
+        ("::", "::"),
+        # The URL form of an IPv6 literal is accepted; uvicorn needs it bare.
+        ("[::]", "::"),
+        ("[fd00::5]", "fd00::5"),
+    ],
+)
+def test_http_host_from_env(monkeypatch, val, expected):
+    if val is not None:
+        monkeypatch.setenv("MCP_HTTP_HOST", val)
+    assert http_host_from_env() == expected
+
+
+@pytest.mark.usefixtures("_clean_transport_env")
+@pytest.mark.parametrize(
+    ("val", "expected"), [(None, 8000), (" ", 8000), ("9000", 9000)]
+)
+def test_http_port_from_env(monkeypatch, val, expected):
+    if val is not None:
+        monkeypatch.setenv("MCP_HTTP_PORT", val)
+    assert http_port_from_env() == expected
+
+
+def test_env_int_names_the_variable(monkeypatch):
+    monkeypatch.setenv("OXIDIZED_TIMEOUT", "thirty")
+    with pytest.raises(ValueError, match="OXIDIZED_TIMEOUT must be an integer"):
+        env_int("OXIDIZED_TIMEOUT", 30)
