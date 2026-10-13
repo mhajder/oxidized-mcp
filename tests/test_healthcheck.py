@@ -86,7 +86,7 @@ def _configure(monkeypatch, port: int, transport: str = "http") -> None:
     monkeypatch.delenv("MCP_HTTP_HOST", raising=False)
 
 
-@pytest.mark.parametrize("transport", ["http", "HTTP", "sse"])
+@pytest.mark.parametrize("transport", ["http", "HTTP", "sse", "streamable-http"])
 def test_http_transports_are_probed(monkeypatch, closed_port, transport):
     _configure(monkeypatch, closed_port, transport)
     assert healthcheck.main() == 1

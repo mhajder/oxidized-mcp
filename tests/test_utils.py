@@ -77,7 +77,14 @@ def _clean_transport_env(monkeypatch):
 @pytest.mark.usefixtures("_clean_transport_env")
 @pytest.mark.parametrize(
     ("val", "expected"),
-    [(None, "stdio"), ("http", "http"), ("SSE", "sse"), ("", "")],
+    [
+        (None, "stdio"),
+        ("http", "http"),
+        ("SSE", "sse"),
+        # FastMCP's name for the streamable HTTP transport.
+        ("streamable-http", "http"),
+        ("", ""),
+    ],
 )
 def test_transport_from_env(monkeypatch, val, expected):
     if val is not None:
