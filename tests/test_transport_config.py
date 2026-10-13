@@ -88,3 +88,13 @@ def test_unknown_bool_setting_stops_startup(monkeypatch, name):
 
     with pytest.raises(ValueError, match=f"{name} must be one of"):
         get_oxidized_config_from_env()
+
+
+# Whitespace-only must count as missing, so main() reports it at startup.
+def test_blank_url_and_username_count_as_unset(monkeypatch):
+    monkeypatch.setenv("OXIDIZED_URL", "   ")
+    monkeypatch.setenv("OXIDIZED_USERNAME", "  ")
+
+    config = get_oxidized_config_from_env()
+    assert config.oxidized_url == ""
+    assert config.username is None

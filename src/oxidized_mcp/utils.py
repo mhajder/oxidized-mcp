@@ -98,6 +98,19 @@ def env_int(name: str, default: int) -> int:
         raise ValueError(f"{name} must be an integer, got {os.getenv(name)!r}") from exc
 
 
+def env_float(name: str, default: float) -> float:
+    """Read a float env var; blank means unset, garbage names the variable."""
+    try:
+        return parse_float(os.getenv(name), default)
+    except ValueError:
+        raise ValueError(f"{name} must be a number, got {os.getenv(name)!r}") from None
+
+
+def env_str(name: str) -> str | None:
+    """Read a string env var, stripped; blank or whitespace-only yields None."""
+    return (os.getenv(name) or "").strip() or None
+
+
 def transport_from_env() -> str:
     """
     Return MCP_TRANSPORT lowercased, defaulting to 'stdio' when unset.

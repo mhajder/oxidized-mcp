@@ -9,6 +9,7 @@ from oxidized_mcp.models import OxidizedConfig
 from oxidized_mcp.models import TransportConfig
 from oxidized_mcp.utils import env_bool
 from oxidized_mcp.utils import env_int
+from oxidized_mcp.utils import env_str
 from oxidized_mcp.utils import http_host_from_env
 from oxidized_mcp.utils import http_port_from_env
 from oxidized_mcp.utils import quote_path_segment
@@ -309,8 +310,10 @@ def get_oxidized_config_from_env() -> OxidizedConfig:
         }
 
     return OxidizedConfig(
-        oxidized_url=os.getenv("OXIDIZED_URL", ""),
-        username=os.getenv("OXIDIZED_USERNAME", "").strip() or None,
+        # Whitespace-only counts as missing, so main() reports it instead of
+        # every call failing with a confusing connection error.
+        oxidized_url=env_str("OXIDIZED_URL") or "",
+        username=env_str("OXIDIZED_USERNAME"),
         password=os.getenv("OXIDIZED_PASSWORD") or None,
         verify_ssl=env_bool("OXIDIZED_VERIFY_SSL", default=True),
         timeout=env_int("OXIDIZED_TIMEOUT", 30),
@@ -333,15 +336,11 @@ def get_oxidized_config_from_env() -> OxidizedConfig:
 
 def get_transport_config_from_env() -> TransportConfig:
     """Get transport configuration from environment variables."""
-    http_bearer_token = os.getenv("MCP_HTTP_BEARER_TOKEN")
-    if http_bearer_token is not None:
-        http_bearer_token = http_bearer_token.strip() or None
-
     return TransportConfig(
         transport_type=transport_from_env(),
         http_host=http_host_from_env(),
         http_port=http_port_from_env(),
-        http_bearer_token=http_bearer_token,
+        http_bearer_token=env_str("MCP_HTTP_BEARER_TOKEN"),
     )
 
 

@@ -1,7 +1,9 @@
 import pytest
 
 from oxidized_mcp.utils import env_bool
+from oxidized_mcp.utils import env_float
 from oxidized_mcp.utils import env_int
+from oxidized_mcp.utils import env_str
 from oxidized_mcp.utils import http_host_from_env
 from oxidized_mcp.utils import http_port_from_env
 from oxidized_mcp.utils import parse_bool
@@ -138,3 +140,30 @@ def test_env_int_names_the_variable(monkeypatch):
     monkeypatch.setenv("OXIDIZED_TIMEOUT", "thirty")
     with pytest.raises(ValueError, match="OXIDIZED_TIMEOUT must be an integer"):
         env_int("OXIDIZED_TIMEOUT", 30)
+
+
+def test_env_float_names_the_variable(monkeypatch):
+    monkeypatch.setenv("SENTRY_TRACES_SAMPLE_RATE", "half")
+    with pytest.raises(ValueError, match="SENTRY_TRACES_SAMPLE_RATE must be a number"):
+        env_float("SENTRY_TRACES_SAMPLE_RATE", 1.0)
+
+
+@pytest.mark.parametrize(("val", "expected"), [(None, 1.0), ("", 1.0), (" ", 1.0)])
+def test_env_float_treats_blank_as_unset(monkeypatch, val, expected):
+    if val is None:
+        monkeypatch.delenv("SENTRY_TRACES_SAMPLE_RATE", raising=False)
+    else:
+        monkeypatch.setenv("SENTRY_TRACES_SAMPLE_RATE", val)
+    assert env_float("SENTRY_TRACES_SAMPLE_RATE", 1.0) == expected
+
+
+@pytest.mark.parametrize(
+    ("val", "expected"),
+    [(None, None), ("", None), ("   ", None), (" value ", "value")],
+)
+def test_env_str(monkeypatch, val, expected):
+    if val is None:
+        monkeypatch.delenv("OXIDIZED_TEST_STR", raising=False)
+    else:
+        monkeypatch.setenv("OXIDIZED_TEST_STR", val)
+    assert env_str("OXIDIZED_TEST_STR") == expected
