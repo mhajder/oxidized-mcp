@@ -38,7 +38,7 @@ Oxidized MCP Server is a Python-based Model Context Protocol (MCP) server that g
 
 ### Prerequisites
 
-- Python 3.11 or higher
+- Python 3.11 to 3.15
 - A running Oxidized instance with [oxidized-web](https://github.com/ytti/oxidized-web) enabled
 - For version history and diffs: the Oxidized `git` (or `gitcrypt`) output
 
