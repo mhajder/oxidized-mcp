@@ -26,6 +26,8 @@ from oxidized_mcp.sentry_init import init_sentry
 from oxidized_mcp.tools import register_tools
 from oxidized_mcp.utils import HEALTH_PATH
 from oxidized_mcp.utils import HTTP_TRANSPORTS
+from oxidized_mcp.utils import TRANSPORT_ALIASES
+from oxidized_mcp.utils import VALID_TRANSPORTS
 
 # Load environment variables
 load_dotenv()
@@ -165,6 +167,18 @@ if OXIDIZED_CONFIG.rate_limit_enabled:
 
 
 def main():
+    # A typo must not fall back to stdio: the HTTP port would never open while
+    # the container healthcheck, which skips non-HTTP transports, kept reporting
+    # healthy. Checked here rather than at import, because `fastmcp run` imports
+    # this module but picks the transport itself.
+    if TRANSPORT_CONFIG.transport_type not in VALID_TRANSPORTS:
+        logger.error(
+            "Unknown MCP_TRANSPORT %r. Valid values: %s",
+            TRANSPORT_CONFIG.transport_type,
+            ", ".join([*sorted(VALID_TRANSPORTS), *TRANSPORT_ALIASES]),
+        )
+        raise SystemExit(1)
+
     # Basic validation
     if not OXIDIZED_CONFIG.oxidized_url:
         logger.error(
@@ -211,7 +225,7 @@ def main():
             port=TRANSPORT_CONFIG.http_port,
         )
     else:
-        # Default to STDIO transport
+        # STDIO transport
         logger.info("Using STDIO transport")
         mcp.run()
 
