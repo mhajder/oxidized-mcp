@@ -2,6 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 from pydantic import Field
+from pydantic import model_validator
 
 
 class OxidizedConfig(BaseModel):
@@ -13,9 +14,10 @@ class OxidizedConfig(BaseModel):
     )
     password: str | None = Field(None, description="HTTP Basic auth password")
     verify_ssl: bool = Field(True, description="Verify SSL (true/false)")
-    timeout: int = Field(30, description="Timeout in seconds")
+    timeout: int = Field(30, gt=0, description="Timeout in seconds")
     search_timeout: int = Field(
         300,
+        gt=0,
         description=(
             "Timeout in seconds for configuration searches; oxidized-web reads "
             "every node's configuration to answer them"
@@ -44,9 +46,28 @@ class OxidizedConfig(BaseModel):
     )
     tool_search_max_results: int = Field(
         5,
-        ge=1,
         description="Maximum number of tools returned by search_tools",
     )
+
+    @model_validator(mode="after")
+    def _check_enabled_features(self) -> "OxidizedConfig":
+        """Validate the settings of enabled features only.
+
+        A disabled feature's leftover values (RATE_LIMIT_MAX_REQUESTS=0 as a
+        way to say "off", for instance) must not stop the server, but once the
+        feature is on, a zero or negative value would reject every call (rate
+        limiting) or return no tools (tool search) without explanation.
+        """
+        positive = {}
+        if self.rate_limit_enabled:
+            positive["RATE_LIMIT_MAX_REQUESTS"] = self.rate_limit_max_requests
+            positive["RATE_LIMIT_WINDOW_MINUTES"] = self.rate_limit_window_minutes
+        if self.tool_search_enabled:
+            positive["TOOL_SEARCH_MAX_RESULTS"] = self.tool_search_max_results
+        bad = [f"{name}={value}" for name, value in positive.items() if value < 1]
+        if bad:
+            raise ValueError(f"must be at least 1: {', '.join(bad)}")
+        return self
 
 
 class TransportConfig(BaseModel):

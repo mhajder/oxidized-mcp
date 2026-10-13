@@ -7,6 +7,7 @@ import httpx2
 
 from oxidized_mcp.models import OxidizedConfig
 from oxidized_mcp.models import TransportConfig
+from oxidized_mcp.utils import HTTP_TRANSPORTS
 from oxidized_mcp.utils import env_bool
 from oxidized_mcp.utils import env_int
 from oxidized_mcp.utils import env_str
@@ -298,6 +299,11 @@ class OxidizedClient:
         return str(info.get("name") or name), resolved_group, full_name
 
 
+def _env_setting(name: str, field: str) -> int:
+    """Read an integer setting, defaulting to OxidizedConfig's own default."""
+    return env_int(name, OxidizedConfig.model_fields[field].default)
+
+
 def get_oxidized_config_from_env() -> OxidizedConfig:
     """Get Oxidized configuration from environment variables."""
     # Parse disabled tags from comma-separated string
@@ -309,6 +315,34 @@ def get_oxidized_config_from_env() -> OxidizedConfig:
             tag.strip() for tag in disabled_tags_str.split(",") if tag.strip()
         }
 
+    # Unknown values used to fall back to bm25 silently, hiding a typo such as
+    # "regx"; refuse them - but only when tool search is on, so a leftover
+    # value cannot stop a server that never uses it.
+    tool_search_enabled = env_bool("TOOL_SEARCH_ENABLED", default=False)
+    tool_search_strategy = (env_str("TOOL_SEARCH_STRATEGY") or "bm25").lower()
+    if tool_search_enabled and tool_search_strategy not in ("bm25", "regex"):
+        raise ValueError(
+            "TOOL_SEARCH_STRATEGY must be 'bm25' or 'regex', "
+            f"got {os.getenv('TOOL_SEARCH_STRATEGY')!r}"
+        )
+    rate_limit_enabled = env_bool("RATE_LIMIT_ENABLED", default=False)
+
+    # Numeric settings of a disabled feature are not read at all: a leftover
+    # value must not stop a server that never uses it, and OxidizedConfig's
+    # own defaults then apply.
+    numbers: dict[str, int] = {}
+    if rate_limit_enabled:
+        numbers["rate_limit_max_requests"] = _env_setting(
+            "RATE_LIMIT_MAX_REQUESTS", "rate_limit_max_requests"
+        )
+        numbers["rate_limit_window_minutes"] = _env_setting(
+            "RATE_LIMIT_WINDOW_MINUTES", "rate_limit_window_minutes"
+        )
+    if tool_search_enabled:
+        numbers["tool_search_max_results"] = _env_setting(
+            "TOOL_SEARCH_MAX_RESULTS", "tool_search_max_results"
+        )
+
     return OxidizedConfig(
         # Whitespace-only counts as missing, so main() reports it instead of
         # every call failing with a confusing connection error.
@@ -316,30 +350,29 @@ def get_oxidized_config_from_env() -> OxidizedConfig:
         username=env_str("OXIDIZED_USERNAME"),
         password=os.getenv("OXIDIZED_PASSWORD") or None,
         verify_ssl=env_bool("OXIDIZED_VERIFY_SSL", default=True),
-        timeout=env_int("OXIDIZED_TIMEOUT", 30),
-        search_timeout=env_int("OXIDIZED_SEARCH_TIMEOUT", 300),
+        timeout=_env_setting("OXIDIZED_TIMEOUT", "timeout"),
+        search_timeout=_env_setting("OXIDIZED_SEARCH_TIMEOUT", "search_timeout"),
         redact_node_vars=env_bool("OXIDIZED_REDACT_NODE_VARS", default=True),
         read_only_mode=env_bool("READ_ONLY_MODE", default=False),
         disabled_tags=disabled_tags,
-        rate_limit_enabled=env_bool("RATE_LIMIT_ENABLED", default=False),
-        rate_limit_max_requests=env_int("RATE_LIMIT_MAX_REQUESTS", 60),
-        rate_limit_window_minutes=env_int("RATE_LIMIT_WINDOW_MINUTES", 1),
-        tool_search_enabled=env_bool("TOOL_SEARCH_ENABLED", default=False),
-        tool_search_strategy=(
-            "regex"
-            if os.getenv("TOOL_SEARCH_STRATEGY", "bm25").lower() == "regex"
-            else "bm25"
-        ),
-        tool_search_max_results=env_int("TOOL_SEARCH_MAX_RESULTS", 5),
+        rate_limit_enabled=rate_limit_enabled,
+        tool_search_enabled=tool_search_enabled,
+        tool_search_strategy="regex" if tool_search_strategy == "regex" else "bm25",
+        **numbers,
     )
 
 
 def get_transport_config_from_env() -> TransportConfig:
     """Get transport configuration from environment variables."""
+    transport_type = transport_from_env()
+    # The port is only parsed when an HTTP transport will bind it: a leftover
+    # non-numeric MCP_HTTP_PORT must not stop stdio or `fastmcp run`.
+    http_port = http_port_from_env() if transport_type in HTTP_TRANSPORTS else 8000
+
     return TransportConfig(
-        transport_type=transport_from_env(),
+        transport_type=transport_type,
         http_host=http_host_from_env(),
-        http_port=http_port_from_env(),
+        http_port=http_port,
         http_bearer_token=env_str("MCP_HTTP_BEARER_TOKEN"),
     )
 

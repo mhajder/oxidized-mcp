@@ -339,7 +339,7 @@ RATE_LIMIT_MAX_REQUESTS=60    # Maximum requests allowed per window
 RATE_LIMIT_WINDOW_MINUTES=1   # Window size in minutes
 ```
 
-If `RATE_LIMIT_ENABLED` is set to `true`, the server will apply rate limiting middleware. Adjust `RATE_LIMIT_MAX_REQUESTS` and `RATE_LIMIT_WINDOW_MINUTES` as needed for your environment.
+If `RATE_LIMIT_ENABLED` is set to `true`, the server will apply rate limiting middleware. Adjust `RATE_LIMIT_MAX_REQUESTS` and `RATE_LIMIT_WINDOW_MINUTES` as needed for your environment. Both must be at least 1 when rate limiting is on; while it is off they are not read.
 
 ### Tool Search for Large Toolsets
 
@@ -359,6 +359,8 @@ TOOL_SEARCH_MAX_RESULTS=8      # optional, default is 5
 
 `bm25` supports natural language queries, while `regex` uses a regex
 `pattern` input for deterministic matching.
+With tool search enabled, any other `TOOL_SEARCH_STRATEGY` value stops the
+server at startup, and `TOOL_SEARCH_MAX_RESULTS` must be at least 1.
 
 Tool search respects existing visibility controls (read-only mode and
 disabled tags).

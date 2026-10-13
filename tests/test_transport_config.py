@@ -41,6 +41,13 @@ def test_http_settings_are_read(monkeypatch):
     assert config.http_bearer_token == "secret-token"
 
 
+# stdio binds no port, so a leftover value must not stop it or `fastmcp run`.
+def test_invalid_port_is_ignored_under_stdio(monkeypatch):
+    monkeypatch.setenv("MCP_HTTP_PORT", "eighty")
+
+    assert get_transport_config_from_env().http_port == 8000
+
+
 # A declared-but-empty port must fall back to the default, not crash startup.
 def test_blank_port_uses_the_default(monkeypatch):
     monkeypatch.setenv("MCP_HTTP_PORT", "  ")
@@ -49,6 +56,7 @@ def test_blank_port_uses_the_default(monkeypatch):
 
 
 def test_invalid_port_names_the_variable(monkeypatch):
+    monkeypatch.setenv("MCP_TRANSPORT", "http")
     monkeypatch.setenv("MCP_HTTP_PORT", "eighty")
 
     with pytest.raises(ValueError, match="MCP_HTTP_PORT must be an integer"):
@@ -98,3 +106,90 @@ def test_blank_url_and_username_count_as_unset(monkeypatch):
     config = get_oxidized_config_from_env()
     assert config.oxidized_url == ""
     assert config.username is None
+
+
+FEATURE_ENV_VARS = (
+    "RATE_LIMIT_ENABLED",
+    "RATE_LIMIT_MAX_REQUESTS",
+    "RATE_LIMIT_WINDOW_MINUTES",
+    "TOOL_SEARCH_ENABLED",
+    "TOOL_SEARCH_STRATEGY",
+    "TOOL_SEARCH_MAX_RESULTS",
+)
+
+
+@pytest.fixture
+def _clean_feature_env(monkeypatch):
+    for name in FEATURE_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+
+
+# Leftover values of a disabled feature must not stop the server.
+@pytest.mark.usefixtures("_clean_feature_env")
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("RATE_LIMIT_MAX_REQUESTS", "0"),
+        ("RATE_LIMIT_WINDOW_MINUTES", "lots"),
+        ("TOOL_SEARCH_MAX_RESULTS", "-1"),
+        ("TOOL_SEARCH_STRATEGY", "regx"),
+    ],
+)
+def test_disabled_feature_ignores_bad_values(monkeypatch, name, value):
+    monkeypatch.setenv(name, value)
+
+    config = get_oxidized_config_from_env()
+    assert config.rate_limit_max_requests == 60
+    assert config.rate_limit_window_minutes == 1
+    assert config.tool_search_max_results == 5
+    assert config.tool_search_strategy == "bm25"
+
+
+@pytest.mark.usefixtures("_clean_feature_env")
+@pytest.mark.parametrize(
+    ("enable", "name"),
+    [
+        ("RATE_LIMIT_ENABLED", "RATE_LIMIT_MAX_REQUESTS"),
+        ("RATE_LIMIT_ENABLED", "RATE_LIMIT_WINDOW_MINUTES"),
+        ("TOOL_SEARCH_ENABLED", "TOOL_SEARCH_MAX_RESULTS"),
+    ],
+)
+def test_enabled_feature_rejects_zero(monkeypatch, enable, name):
+    monkeypatch.setenv(enable, "true")
+    monkeypatch.setenv(name, "0")
+
+    with pytest.raises(ValueError, match=f"must be at least 1: {name}=0"):
+        get_oxidized_config_from_env()
+
+
+@pytest.mark.usefixtures("_clean_feature_env")
+def test_enabled_feature_reads_its_settings(monkeypatch):
+    monkeypatch.setenv("RATE_LIMIT_ENABLED", "true")
+    monkeypatch.setenv("RATE_LIMIT_MAX_REQUESTS", "10")
+    monkeypatch.setenv("TOOL_SEARCH_ENABLED", "true")
+    monkeypatch.setenv("TOOL_SEARCH_STRATEGY", " Regex ")
+    monkeypatch.setenv("TOOL_SEARCH_MAX_RESULTS", "3")
+
+    config = get_oxidized_config_from_env()
+    assert config.rate_limit_max_requests == 10
+    assert config.tool_search_strategy == "regex"
+    assert config.tool_search_max_results == 3
+
+
+@pytest.mark.usefixtures("_clean_feature_env")
+def test_strategy_typo_stops_startup_when_tool_search_is_on(monkeypatch):
+    monkeypatch.setenv("TOOL_SEARCH_ENABLED", "true")
+    monkeypatch.setenv("TOOL_SEARCH_STRATEGY", "regx")
+
+    with pytest.raises(
+        ValueError, match="TOOL_SEARCH_STRATEGY must be 'bm25' or 'regex'"
+    ):
+        get_oxidized_config_from_env()
+
+
+@pytest.mark.parametrize("name", ["OXIDIZED_TIMEOUT", "OXIDIZED_SEARCH_TIMEOUT"])
+def test_zero_timeout_is_rejected(monkeypatch, name):
+    monkeypatch.setenv(name, "0")
+
+    with pytest.raises(ValueError, match="greater than 0"):
+        get_oxidized_config_from_env()
