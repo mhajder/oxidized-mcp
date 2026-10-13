@@ -113,7 +113,10 @@ def test_transport_from_env(monkeypatch, val, expected):
     ("val", "expected"),
     [
         (None, "127.0.0.1"),
-        ("0.0.0.0", "0.0.0.0"),  # noqa: S104
+        # Blank counts as unset; binding every interface must be explicit.
+        ("", "127.0.0.1"),
+        ("   ", "127.0.0.1"),
+        (" 0.0.0.0 ", "0.0.0.0"),  # noqa: S104
         ("::", "::"),
         # The URL form of an IPv6 literal is accepted; uvicorn needs it bare.
         ("[::]", "::"),

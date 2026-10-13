@@ -124,8 +124,9 @@ def test_stdio_has_nothing_to_probe(monkeypatch, closed_port, transport):
         ("::", ["::1", "127.0.0.1"]),
         ("127.0.0.1", ["127.0.0.1"]),
         ("172.18.0.5", ["172.18.0.5"]),
-        # An empty host reaches uvicorn as is and binds every interface.
-        ("", ["::1", "127.0.0.1"]),
+        # Blank counts as unset: loopback.
+        ("", ["127.0.0.1"]),
+        ("  ", ["127.0.0.1"]),
         ("[fd00::5]", ["fd00::5"]),
         ("[::]", ["::1", "127.0.0.1"]),
     ],

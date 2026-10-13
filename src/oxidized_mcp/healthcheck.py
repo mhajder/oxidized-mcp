@@ -18,11 +18,9 @@ from oxidized_mcp.utils import http_host_from_env
 from oxidized_mcp.utils import http_port_from_env
 from oxidized_mcp.utils import transport_from_env
 
-# Wildcard binds listen on every interface, loopback included. An empty
-# MCP_HTTP_HOST is passed to uvicorn as is, which also binds every interface.
+# Wildcard binds listen on every interface, loopback included.
 IPV4_WILDCARD = "0.0.0.0"  # noqa: S104
 IPV6_WILDCARD = "::"
-ALL_INTERFACES = ""
 
 # The Dockerfile HEALTHCHECK timeout is 10s; two probes plus startup fit inside it.
 PROBE_TIMEOUT_SECONDS = 2
@@ -37,7 +35,7 @@ def probe_hosts() -> list[str]:
     host = http_host_from_env()
     if host == IPV4_WILDCARD:
         return ["127.0.0.1"]
-    if host in (IPV6_WILDCARD, ALL_INTERFACES):
+    if host == IPV6_WILDCARD:
         return ["::1", "127.0.0.1"]
     return [host]
 
