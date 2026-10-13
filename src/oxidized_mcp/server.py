@@ -117,29 +117,26 @@ register_tools(mcp, OXIDIZED_CONFIG)
 def configure_component_visibility() -> None:
     """Apply server-level visibility transforms for read-only and disabled tags."""
 
-    disabled_tags = getattr(OXIDIZED_CONFIG, "disabled_tags", set())
-    read_only_mode = getattr(OXIDIZED_CONFIG, "read_only_mode", False)
-
-    if read_only_mode:
+    if OXIDIZED_CONFIG.read_only_mode:
         logger.info("Read-only mode is enabled - restricting to read-only components")
         mcp.enable(tags={"read-only"}, only=True)
 
-    if disabled_tags:
+    if OXIDIZED_CONFIG.disabled_tags:
         logger.info(
             "Disabled tags configured: %s - disabling matching components",
-            disabled_tags,
+            OXIDIZED_CONFIG.disabled_tags,
         )
-        mcp.disable(tags=disabled_tags)
+        mcp.disable(tags=OXIDIZED_CONFIG.disabled_tags)
 
 
 def configure_tool_search() -> None:
     """Apply the optional FastMCP tool-search transform."""
 
-    if not getattr(OXIDIZED_CONFIG, "tool_search_enabled", False):
+    if not OXIDIZED_CONFIG.tool_search_enabled:
         return
 
-    strategy = getattr(OXIDIZED_CONFIG, "tool_search_strategy", "bm25")
-    max_results = getattr(OXIDIZED_CONFIG, "tool_search_max_results", 5)
+    strategy = OXIDIZED_CONFIG.tool_search_strategy
+    max_results = OXIDIZED_CONFIG.tool_search_max_results
 
     if strategy == "regex":
         mcp.add_transform(RegexSearchTransform(max_results=max_results))
@@ -157,7 +154,7 @@ configure_component_visibility()
 configure_tool_search()
 
 # Optional rate limiting
-if getattr(OXIDIZED_CONFIG, "rate_limit_enabled", False):
+if OXIDIZED_CONFIG.rate_limit_enabled:
     logger.info("Rate limiting is enabled - applying middleware")
     mcp.add_middleware(
         SlidingWindowRateLimitingMiddleware(
