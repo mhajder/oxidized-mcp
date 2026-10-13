@@ -5,7 +5,7 @@ Optional Sentry integration for error tracking and monitoring.
 import logging
 import os
 
-from oxidized_mcp.utils import parse_bool
+from oxidized_mcp.utils import env_bool
 from oxidized_mcp.utils import parse_float
 
 logger = logging.getLogger(__name__)
@@ -43,9 +43,7 @@ def init_sentry() -> bool:
         traces_sample_rate = parse_float(os.getenv("SENTRY_TRACES_SAMPLE_RATE"), 1.0)
         # Off by default: with the MCP integration, PII mode records tool
         # results, which here are full device configurations with secrets.
-        send_default_pii = parse_bool(
-            os.getenv("SENTRY_SEND_DEFAULT_PII"), default=False
-        )
+        send_default_pii = env_bool("SENTRY_SEND_DEFAULT_PII", default=False)
         environment: str | None = os.getenv("SENTRY_ENVIRONMENT")
         release: str | None = os.getenv("SENTRY_RELEASE")
         profile_session_sample_rate = parse_float(
@@ -56,7 +54,7 @@ def init_sentry() -> bool:
         profile_lifecycle: str = (
             "manual" if profile_lifecycle_str == "manual" else "trace"
         )
-        enable_logs = parse_bool(os.getenv("SENTRY_ENABLE_LOGS"), default=True)
+        enable_logs = env_bool("SENTRY_ENABLE_LOGS", default=True)
 
         # Get package version for default release
         if not release:

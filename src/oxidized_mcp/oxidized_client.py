@@ -7,10 +7,10 @@ import httpx2
 
 from oxidized_mcp.models import OxidizedConfig
 from oxidized_mcp.models import TransportConfig
+from oxidized_mcp.utils import env_bool
 from oxidized_mcp.utils import env_int
 from oxidized_mcp.utils import http_host_from_env
 from oxidized_mcp.utils import http_port_from_env
-from oxidized_mcp.utils import parse_bool
 from oxidized_mcp.utils import quote_path_segment
 from oxidized_mcp.utils import transport_from_env
 
@@ -312,18 +312,16 @@ def get_oxidized_config_from_env() -> OxidizedConfig:
         oxidized_url=os.getenv("OXIDIZED_URL", ""),
         username=os.getenv("OXIDIZED_USERNAME", "").strip() or None,
         password=os.getenv("OXIDIZED_PASSWORD") or None,
-        verify_ssl=parse_bool(os.getenv("OXIDIZED_VERIFY_SSL"), default=True),
+        verify_ssl=env_bool("OXIDIZED_VERIFY_SSL", default=True),
         timeout=env_int("OXIDIZED_TIMEOUT", 30),
         search_timeout=env_int("OXIDIZED_SEARCH_TIMEOUT", 300),
-        redact_node_vars=parse_bool(
-            os.getenv("OXIDIZED_REDACT_NODE_VARS"), default=True
-        ),
-        read_only_mode=parse_bool(os.getenv("READ_ONLY_MODE"), default=False),
+        redact_node_vars=env_bool("OXIDIZED_REDACT_NODE_VARS", default=True),
+        read_only_mode=env_bool("READ_ONLY_MODE", default=False),
         disabled_tags=disabled_tags,
-        rate_limit_enabled=parse_bool(os.getenv("RATE_LIMIT_ENABLED"), default=False),
+        rate_limit_enabled=env_bool("RATE_LIMIT_ENABLED", default=False),
         rate_limit_max_requests=env_int("RATE_LIMIT_MAX_REQUESTS", 60),
         rate_limit_window_minutes=env_int("RATE_LIMIT_WINDOW_MINUTES", 1),
-        tool_search_enabled=parse_bool(os.getenv("TOOL_SEARCH_ENABLED"), default=False),
+        tool_search_enabled=env_bool("TOOL_SEARCH_ENABLED", default=False),
         tool_search_strategy=(
             "regex"
             if os.getenv("TOOL_SEARCH_STRATEGY", "bm25").lower() == "regex"

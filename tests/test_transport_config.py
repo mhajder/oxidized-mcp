@@ -70,3 +70,21 @@ def test_blank_bearer_token_counts_as_unset(monkeypatch, value):
     monkeypatch.setenv("MCP_HTTP_BEARER_TOKEN", value)
 
     assert get_transport_config_from_env().http_bearer_token is None
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "READ_ONLY_MODE",
+        "OXIDIZED_VERIFY_SSL",
+        "OXIDIZED_REDACT_NODE_VARS",
+        "RATE_LIMIT_ENABLED",
+        "TOOL_SEARCH_ENABLED",
+    ],
+)
+def test_unknown_bool_setting_stops_startup(monkeypatch, name):
+    """A typo must not turn read-only mode, TLS checks or redaction off."""
+    monkeypatch.setenv(name, "enabled")
+
+    with pytest.raises(ValueError, match=f"{name} must be one of"):
+        get_oxidized_config_from_env()
