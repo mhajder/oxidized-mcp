@@ -113,14 +113,14 @@ def env_str(name: str) -> str | None:
 
 def transport_from_env() -> str:
     """
-    Return MCP_TRANSPORT lowercased, defaulting to 'stdio' when unset.
+    Return MCP_TRANSPORT stripped and lowercased; unset or blank means 'stdio'.
 
     The server and the container healthcheck both read the transport here, so
     they always agree on whether an HTTP transport is running.
 
     'streamable-http' is read as 'http', FastMCP's name for that transport.
     """
-    transport = os.getenv("MCP_TRANSPORT", "stdio").lower()
+    transport = (env_str("MCP_TRANSPORT") or "stdio").lower()
     return TRANSPORT_ALIASES.get(transport, transport)
 
 

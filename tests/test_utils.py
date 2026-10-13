@@ -99,7 +99,10 @@ def _clean_transport_env(monkeypatch):
         ("SSE", "sse"),
         # FastMCP's name for the streamable HTTP transport.
         ("streamable-http", "http"),
-        ("", ""),
+        # Surrounding spaces are ignored; blank counts as unset.
+        (" http ", "http"),
+        ("", "stdio"),
+        ("   ", "stdio"),
     ],
 )
 def test_transport_from_env(monkeypatch, val, expected):
