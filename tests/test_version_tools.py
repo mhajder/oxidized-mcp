@@ -282,3 +282,80 @@ async def test_view_not_supported_is_explained(make_server):
     mcp, _ = make_server(handler)
     with pytest.raises(Exception, match="gitcrypt"):
         await call(mcp, "get_node_version", {"node": "sw1", "oid": OID_NEW})
+
+
+@pytest.mark.asyncio
+async def test_blank_oid_is_rejected(server):
+    mcp, _ = server
+    # Passes min_length=4 but strips to "", which would prefix-match everything.
+    with pytest.raises(Exception, match="must not be blank"):
+        await call(mcp, "get_node_version", {"node": "sw1", "oid": "    "})
+
+
+@pytest.mark.asyncio
+async def test_diff_counts_changed_lines_that_look_like_headers(make_server):
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        if request.url.path == "/node/version/view":
+            text = {
+                OID_MID: "hostname sw1\n---- banner\n",
+                OID_NEW: "hostname sw1\n++++ banner\n",
+            }[request.url.params["oid"]]
+            return httpx2.Response(200, text=text)
+        return version_handler(request)
+
+    mcp, _ = make_server(handler)
+    result = await call(mcp, "diff_node_versions", {"node": "sw1"})
+    # Diff lines "----- banner" and "+++++ banner" are changes, not headers.
+    assert result["lines_removed"] == 1
+    assert result["lines_added"] == 1
+
+
+@pytest.mark.asyncio
+async def test_diff_pages_with_offset(server):
+    mcp, _ = server
+    arguments = {"node": "sw1", "oid": "cccc", "base_oid": "aaaa", "context_lines": 0}
+    first = await call(mcp, "diff_node_versions", {**arguments, "max_lines": 4})
+    assert first["truncated"] is True
+    assert first["next_offset"] == 4
+
+    rest = await call(
+        mcp,
+        "diff_node_versions",
+        {**arguments, "max_lines": 4, "offset": first["next_offset"]},
+    )
+    assert rest["truncated"] is False
+    assert rest["content"].splitlines() == ["+vlan 20", "+vlan 30"]
+    # Counts always describe the whole diff, not the page.
+    assert (rest["lines_added"], rest["lines_removed"]) == (2, 1)
+
+
+@pytest.mark.asyncio
+async def test_diff_pages_fetch_the_versions_once(server):
+    mcp, requests = server
+    arguments = {"node": "sw1", "oid": "cccc", "base_oid": "aaaa", "context_lines": 0}
+    await call(mcp, "diff_node_versions", {**arguments, "max_lines": 4})
+    await call(mcp, "diff_node_versions", {**arguments, "max_lines": 4, "offset": 4})
+    views = [r for r in requests if r.url.path == "/node/version/view"]
+    assert len(views) == 2
+
+    # Other context is a different diff.
+    await call(mcp, "diff_node_versions", {**arguments, "context_lines": 1})
+    views = [r for r in requests if r.url.path == "/node/version/view"]
+    assert len(views) == 4
+
+
+@pytest.mark.asyncio
+async def test_failed_version_fetch_is_not_cached(make_server):
+    failing = True
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        if failing and request.url.path == "/node/version/view":
+            return httpx2.Response(200, text="not supported")
+        return version_handler(request)
+
+    mcp, _ = make_server(handler)
+    with pytest.raises(Exception, match="gitcrypt"):
+        await call(mcp, "diff_node_versions", {"node": "sw1"})
+    failing = False
+    result = await call(mcp, "diff_node_versions", {"node": "sw1"})
+    assert result["lines_added"] == 1

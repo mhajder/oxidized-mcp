@@ -2,6 +2,7 @@ import asyncio
 import difflib
 import logging
 import re
+from collections import OrderedDict
 from typing import Annotated
 from typing import Any
 
@@ -19,6 +20,9 @@ logger = logging.getLogger(__name__)
 
 _VERSION_FIELDS = ("oid", "date", "author", "message")
 _FULL_OID = re.compile(r"[0-9a-fA-F]{40}")
+# Diffs kept for paging with diff_node_versions' offset. Each holds a whole
+# diff, so the cache is kept small.
+_DIFF_CACHE_SIZE = 8
 
 
 def _is_full_oid(oid: str) -> bool:
@@ -32,6 +36,8 @@ def _version_summary(version: dict[str, Any]) -> dict[str, Any]:
 def _resolve_oid(versions: list[dict[str, Any]], oid: str) -> int:
     """Return the index of the version matching a full oid or unique prefix."""
     needle = oid.strip().lower()
+    if not needle:
+        raise ValueError("Version oid must not be blank")
     matches = [
         index
         for index, version in enumerate(versions)
@@ -91,6 +97,9 @@ async def _view_version(
 
 def register_versions_tools(mcp: FastMCP, config: OxidizedConfig) -> None:
     """Register configuration version (git history) tools with the FastMCP server."""
+    # Keyed by full oids, whose content never changes, so entries never go
+    # stale. Paging a long diff then fetches the two versions only once.
+    diff_cache: OrderedDict[tuple[str, str, str, int], list[str]] = OrderedDict()
 
     @mcp.tool(
         tags={"version", "read-only"},
@@ -272,6 +281,10 @@ def register_versions_tools(mcp: FastMCP, config: OxidizedConfig) -> None:
                 description="Maximum diff lines to return (0 = whole diff)",
             ),
         ] = 2000,
+        offset: Annotated[
+            int,
+            Field(default=0, ge=0, description="Zero-based first diff line to return"),
+        ] = 0,
     ) -> dict[str, Any]:
         """
         Show what changed in a node's configuration between two versions.
@@ -286,6 +299,8 @@ def register_versions_tools(mcp: FastMCP, config: OxidizedConfig) -> None:
             group: Node group; looked up automatically when omitted
             context_lines: Unchanged lines of context around each change
             max_lines: Maximum diff lines to return
+            offset: Zero-based first diff line to return; when 'truncated' is
+                true, call again with offset set to 'next_offset'
 
         Returns:
             Dictionary with both versions, change counts and the unified 'content'
@@ -317,31 +332,37 @@ def register_versions_tools(mcp: FastMCP, config: OxidizedConfig) -> None:
                     f"Version {target.get('oid')!r} is the oldest stored version "
                     f"of {full_name!r} - there is nothing to compare it to"
                 )
-            base_text, target_text = await asyncio.gather(
-                _view_version(client, name, resolved_group, str(base["oid"])),
-                _view_version(client, name, resolved_group, str(target["oid"])),
-            )
-
-        diff_lines = list(
-            difflib.unified_diff(
-                base_text.splitlines(),
-                target_text.splitlines(),
-                fromfile=f"{full_name}@{str(base['oid'])[:8]}",
-                tofile=f"{full_name}@{str(target['oid'])[:8]}",
-                n=context_lines,
-                lineterm="",
-            )
-        )
-        added = sum(
-            1
-            for line in diff_lines
-            if line.startswith("+") and not line.startswith("+++")
-        )
-        removed = sum(
-            1
-            for line in diff_lines
-            if line.startswith("-") and not line.startswith("---")
-        )
+            base_oid_full, target_oid_full = str(base["oid"]), str(target["oid"])
+            cache_key = (full_name, base_oid_full, target_oid_full, context_lines)
+            cacheable = _is_full_oid(base_oid_full) and _is_full_oid(target_oid_full)
+            diff_lines = diff_cache.get(cache_key) if cacheable else None
+            if diff_lines is None:
+                base_text, target_text = await asyncio.gather(
+                    _view_version(client, name, resolved_group, base_oid_full),
+                    _view_version(client, name, resolved_group, target_oid_full),
+                )
+                diff_lines = list(
+                    difflib.unified_diff(
+                        base_text.splitlines(),
+                        target_text.splitlines(),
+                        fromfile=f"{full_name}@{base_oid_full[:8]}",
+                        tofile=f"{full_name}@{target_oid_full[:8]}",
+                        n=context_lines,
+                        lineterm="",
+                    )
+                )
+                if cacheable:
+                    diff_cache[cache_key] = diff_lines
+                    if len(diff_cache) > _DIFF_CACHE_SIZE:
+                        diff_cache.popitem(last=False)
+            else:
+                diff_cache.move_to_end(cache_key)
+        # Skip the two ---/+++ file headers by position: a changed line whose
+        # own text starts with "--" or "++" (e.g. a "-----" banner) would
+        # otherwise look like a header and go uncounted.
+        body = diff_lines[2:]
+        added = sum(1 for line in body if line.startswith("+"))
+        removed = sum(1 for line in body if line.startswith("-"))
         return {
             "node": name,
             "full_name": full_name,
@@ -350,5 +371,5 @@ def register_versions_tools(mcp: FastMCP, config: OxidizedConfig) -> None:
             "identical": not diff_lines,
             "lines_added": added,
             "lines_removed": removed,
-            **page_lines("\n".join(diff_lines), 0, max_lines),
+            **page_lines("\n".join(diff_lines), offset, max_lines),
         }
