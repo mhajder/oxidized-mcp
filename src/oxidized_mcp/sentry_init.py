@@ -50,11 +50,17 @@ def init_sentry() -> bool:
         profile_session_sample_rate = env_float(
             "SENTRY_PROFILE_SESSION_SAMPLE_RATE", 1.0
         )
-        profile_lifecycle_str = env_str("SENTRY_PROFILE_LIFECYCLE") or "trace"
-        # Ensure profile_lifecycle is a valid literal value
-        profile_lifecycle: str = (
-            "manual" if profile_lifecycle_str == "manual" else "trace"
-        )
+        profile_lifecycle_raw = env_str("SENTRY_PROFILE_LIFECYCLE") or "trace"
+        profile_lifecycle = profile_lifecycle_raw.lower()
+        if profile_lifecycle not in ("trace", "manual"):
+            # Kept as a fallback rather than an error so existing setups still
+            # start, but a typo should not go unnoticed.
+            logger.warning(
+                "Unknown SENTRY_PROFILE_LIFECYCLE %r; using 'trace' "
+                "(valid values: trace, manual)",
+                profile_lifecycle_raw,
+            )
+            profile_lifecycle = "trace"
         enable_logs = env_bool("SENTRY_ENABLE_LOGS", default=True)
 
         # Get package version for default release

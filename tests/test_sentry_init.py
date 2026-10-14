@@ -41,3 +41,39 @@ def test_sentry_pii_can_still_be_opted_into(fake_sentry, monkeypatch):
     monkeypatch.setenv("SENTRY_SEND_DEFAULT_PII", "true")
     init_sentry()
     assert fake_sentry.call_args.kwargs["send_default_pii"] is True
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (None, "trace"),
+        ("manual", "manual"),
+        ("MANUAL", "manual"),
+        (" Manual ", "manual"),
+        ("trace", "trace"),
+    ],
+)
+def test_profile_lifecycle_ignores_case(fake_sentry, monkeypatch, value, expected):
+    if value is None:
+        monkeypatch.delenv("SENTRY_PROFILE_LIFECYCLE", raising=False)
+    else:
+        monkeypatch.setenv("SENTRY_PROFILE_LIFECYCLE", value)
+    init_sentry()
+    assert fake_sentry.call_args.kwargs["profile_lifecycle"] == expected
+
+
+def test_unknown_profile_lifecycle_warns_and_uses_trace(
+    fake_sentry, monkeypatch, caplog
+):
+    monkeypatch.setenv("SENTRY_PROFILE_LIFECYCLE", "Continuous")
+    init_sentry()
+    assert fake_sentry.call_args.kwargs["profile_lifecycle"] == "trace"
+    # Quoted as set, so it can be found in the environment.
+    assert "Unknown SENTRY_PROFILE_LIFECYCLE 'Continuous'" in caplog.text
+
+
+@pytest.mark.usefixtures("fake_sentry")
+def test_known_profile_lifecycle_does_not_warn(monkeypatch, caplog):
+    monkeypatch.setenv("SENTRY_PROFILE_LIFECYCLE", "manual")
+    init_sentry()
+    assert "SENTRY_PROFILE_LIFECYCLE" not in caplog.text
