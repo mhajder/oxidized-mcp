@@ -8,6 +8,7 @@ from datetime import timedelta
 import httpx2
 import pytest
 
+from oxidized_mcp.oxidized_client import _annotate_with_response_body
 from oxidized_mcp.tools.nodes import parse_oxidized_time
 from tests.conftest import call
 
@@ -251,6 +252,18 @@ async def test_500_outside_node_routes_has_no_node_hint(make_server):
     assert "find_nodes" not in str(exc.value)
 
 
+def test_http_error_message_hides_url_credentials():
+    request = httpx2.Request("GET", "http://admin:s3cret@oxidized:8888/nodes.json")
+    response = httpx2.Response(500, text="boom", request=request)
+    with pytest.raises(httpx2.HTTPStatusError) as exc:
+        response.raise_for_status()
+    # The message reaches MCP clients and Sentry.
+    message = str(_annotate_with_response_body(exc.value))
+    assert "s3cret" not in message
+    assert "http://<redacted>@oxidized:8888/nodes.json" in message
+    assert "response body: boom" in message
+
+
 @pytest.mark.asyncio
 async def test_list_nodes_server_filter_redacts_vars(server):
     mcp, _ = server
@@ -365,3 +378,34 @@ async def test_no_auth_header_without_credentials(server):
 )
 def test_parse_oxidized_time(value, expected):
     assert parse_oxidized_time(value) == expected
+
+
+def test_url_credentials_are_moved_into_basic_auth():
+    from oxidized_mcp.models import OxidizedConfig
+    from oxidized_mcp.oxidized_client import OxidizedClient
+
+    client = OxidizedClient(
+        OxidizedConfig(oxidized_url="http://admin:s%40cret@oxidized:8888/")
+    )
+    # Left in the URL, httpx2 would log the password with every request.
+    assert client.base_url == "http://oxidized:8888"
+    request = httpx2.Request("GET", "http://oxidized:8888/nodes.json")
+    auth = client.build_auth()
+    assert auth is not None
+    auth_flow = auth.auth_flow(request)
+    expected = httpx2.BasicAuth("admin", "s@cret").auth_flow(
+        httpx2.Request("GET", "http://oxidized:8888/nodes.json")
+    )
+    assert (
+        next(auth_flow).headers["authorization"]
+        == next(expected).headers["authorization"]
+    )
+
+
+def test_password_only_url_credentials_are_moved_into_basic_auth():
+    from oxidized_mcp.models import OxidizedConfig
+    from oxidized_mcp.oxidized_client import OxidizedClient
+
+    client = OxidizedClient(OxidizedConfig(oxidized_url="http://:s3cret@oxidized"))
+    assert "s3cret" not in client.base_url
+    assert client.build_auth() is not None

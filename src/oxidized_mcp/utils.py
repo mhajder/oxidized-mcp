@@ -1,4 +1,5 @@
 import os
+import re
 from typing import Any
 from urllib.parse import quote
 
@@ -10,8 +11,7 @@ BOOL_HELP = ", ".join(
 )
 REDACTED = "<redacted>"
 
-# MCP_TRANSPORT values that serve HTTP. Anything else, including an unknown
-# value, runs the STDIO transport.
+# MCP_TRANSPORT values that serve HTTP.
 HTTP_TRANSPORTS = frozenset({"sse", "http"})
 # FastMCP calls the streamable HTTP transport "streamable-http"; accept that
 # spelling for the "http" transport this server documents.
@@ -216,6 +216,35 @@ def quote_path_segment(value: str) -> str:
     if set(encoded) == {"."}:
         encoded = encoded.replace(".", "%2E")
     return encoded
+
+
+# Optional "scheme://" then the userinfo up to the last "@" of the authority.
+# A regex rather than urlsplit: urlsplit reads a scheme-less "user:pass@host"
+# as scheme "user" (leaving the password in place) and raises on a malformed
+# authority such as "http://[::1", which must not crash a log call.
+_URL_USERINFO = re.compile(r"^(?P<prefix>(?:[A-Za-z][A-Za-z0-9+.\-]*://)?)[^/?#]*@")
+# Lenient variant for a configured URL: everything up to the last "@" goes, so
+# a password with an unencoded "/", "#" or "?" ("admin:pa/ss@host") is still
+# hidden. Over-redacting an "@" in the path is harmless in a log line.
+_URL_USERINFO_LENIENT = re.compile(
+    r"^(?P<prefix>(?:[A-Za-z][A-Za-z0-9+.\-]*://)?).*@", re.DOTALL
+)
+
+
+def redact_url_credentials(url: str, *, mask_query: bool = False) -> str:
+    """Return ``url`` with any ``user:password@`` userinfo replaced, for logging.
+
+    With ``mask_query`` (for a configured URL such as OXIDIZED_URL, which may
+    be malformed) everything up to the last "@" counts as userinfo, and the
+    whole query string is replaced too, as it may carry a token. Request URLs
+    keep theirs: it holds the tool parameters, which help when reading an
+    error.
+    """
+    pattern = _URL_USERINFO_LENIENT if mask_query else _URL_USERINFO
+    url = pattern.sub(rf"\g<prefix>{REDACTED}@", url, count=1)
+    if mask_query and "?" in url:
+        url = f"{url.split('?', 1)[0]}?{REDACTED}"
+    return url
 
 
 def redact_node_vars(node: dict[str, Any]) -> dict[str, Any]:

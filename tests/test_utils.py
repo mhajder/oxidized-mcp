@@ -10,6 +10,7 @@ from oxidized_mcp.utils import parse_bool
 from oxidized_mcp.utils import parse_float
 from oxidized_mcp.utils import parse_int
 from oxidized_mcp.utils import quote_path_segment
+from oxidized_mcp.utils import redact_url_credentials
 from oxidized_mcp.utils import transport_from_env
 
 
@@ -173,3 +174,51 @@ def test_env_str(monkeypatch, val, expected):
     else:
         monkeypatch.setenv("OXIDIZED_TEST_STR", val)
     assert env_str("OXIDIZED_TEST_STR") == expected
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("http://admin:s3cret@oxidized:8888", "http://<redacted>@oxidized:8888"),
+        ("https://admin@oxidized/api", "https://<redacted>@oxidized/api"),
+        # The password may itself contain "@"; everything up to the last one goes.
+        ("http://admin:p@ss@oxidized:8888", "http://<redacted>@oxidized:8888"),
+        # Without a scheme, urlsplit would read "admin" as the scheme.
+        ("admin:s3cret@oxidized:8888", "<redacted>@oxidized:8888"),
+        ("http://admin:s3cret@[::1:8888", "http://<redacted>@[::1:8888"),
+        ("http://oxidized:8888", "http://oxidized:8888"),
+        # An "@" after the authority is not userinfo.
+        ("http://oxidized/a@b", "http://oxidized/a@b"),
+        ("http://oxidized?q=a@b", "http://oxidized?q=a@b"),
+        ("http://oxidized#a@b", "http://oxidized#a@b"),
+        # Malformed authorities must not raise inside a log call.
+        ("http://[::1:8888", "http://[::1:8888"),
+        ("", ""),
+    ],
+)
+def test_redact_url_credentials(url, expected):
+    assert redact_url_credentials(url) == expected
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        (
+            "http://admin:s3cret@oxidized:8888?token=abc",
+            "http://<redacted>@oxidized:8888?<redacted>",
+        ),
+        ("http://oxidized:8888/?token=abc&x=1", "http://oxidized:8888/?<redacted>"),
+        ("http://oxidized:8888", "http://oxidized:8888"),
+        # An unencoded "/" or "#" in the password must not leak it.
+        ("http://admin:pa/ss@oxidized:8888", "http://<redacted>@oxidized:8888"),
+        ("http://admin:pa#ss@oxidized:8888", "http://<redacted>@oxidized:8888"),
+    ],
+)
+def test_redact_url_credentials_can_mask_the_query(url, expected):
+    assert redact_url_credentials(url, mask_query=True) == expected
+
+
+def test_redact_url_credentials_keeps_the_query_by_default():
+    # Request URLs carry tool parameters there, useful in an error message.
+    url = "http://oxidized/node/version/view?node=sw1&oid=abcd"
+    assert redact_url_credentials(url) == url

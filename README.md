@@ -132,7 +132,9 @@ uv run prek install
 
 ```env
 # Oxidized Connection Details
-# Base URL of oxidized-web (include the url_prefix if one is configured)
+# Base URL of oxidized-web (include the url_prefix if one is configured).
+# A query string (?...) is rejected; use the Basic auth settings below, or
+# percent-encode special characters in credentials put in the URL.
 OXIDIZED_URL=http://localhost:8888
 
 # Optional HTTP Basic auth, e.g. for a reverse proxy in front of oxidized-web

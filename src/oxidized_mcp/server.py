@@ -28,6 +28,7 @@ from oxidized_mcp.utils import HEALTH_PATH
 from oxidized_mcp.utils import HTTP_TRANSPORTS
 from oxidized_mcp.utils import TRANSPORT_ALIASES
 from oxidized_mcp.utils import VALID_TRANSPORTS
+from oxidized_mcp.utils import redact_url_credentials
 
 # Load environment variables
 load_dotenv()
@@ -195,7 +196,12 @@ def main():
             "Ensure the server is not exposed to untrusted networks (e.g. bind to 127.0.0.1 instead of 0.0.0.0)."
         )
 
-    logger.info(f"Starting Oxidized MCP Server at {OXIDIZED_CONFIG.oxidized_url} ...")
+    # The URL may embed basic-auth credentials or a query token, and logs can
+    # be shipped to Sentry.
+    logger.info(
+        "Starting Oxidized MCP Server at %s ...",
+        redact_url_credentials(OXIDIZED_CONFIG.oxidized_url, mask_query=True),
+    )
 
     # Choose transport based on configuration
     if TRANSPORT_CONFIG.transport_type == "sse":

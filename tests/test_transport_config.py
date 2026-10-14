@@ -108,6 +108,63 @@ def test_blank_url_and_username_count_as_unset(monkeypatch):
     assert config.username is None
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://oxidized:8888/?token=s3cret",
+        # An empty query still makes httpx2 send ".../?/nodes.json".
+        "http://oxidized:8888/?",
+        "http://oxidized:8888?",
+    ],
+)
+def test_url_with_a_query_stops_startup(monkeypatch, url):
+    # httpx2 would append every request path after the query.
+    monkeypatch.setenv("OXIDIZED_URL", url)
+
+    with pytest.raises(ValueError, match="must not contain a query") as exc:
+        get_oxidized_config_from_env()
+    assert "s3cret" not in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        # Unencoded "/" or "#" in the password: httpx2 reads part of it as the
+        # port and would quote it in every tool call's error.
+        "http://admin:s3/cret@oxidized:8888",
+        "http://admin:s3#cret@oxidized:8888",
+        "http://[::1",
+        "oxidized:8888",
+        "oxidized",
+        "ftp://oxidized",
+        "http://",
+    ],
+)
+def test_unusable_url_stops_startup(monkeypatch, url):
+    monkeypatch.setenv("OXIDIZED_URL", url)
+
+    with pytest.raises(ValueError, match="must be an http:// or https:// URL") as exc:
+        get_oxidized_config_from_env()
+    assert "s3" not in str(exc.value)
+    assert exc.value.__cause__ is None
+    assert exc.value.__suppress_context__
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://oxidized:8888",
+        "https://oxidized/prefix/",
+        "http://admin:s3%2Fcret@oxidized:8888",
+        "http://[::1]:8888",
+    ],
+)
+def test_url_without_a_query_is_accepted(monkeypatch, url):
+    monkeypatch.setenv("OXIDIZED_URL", url)
+
+    assert get_oxidized_config_from_env().oxidized_url == url
+
+
 FEATURE_ENV_VARS = (
     "RATE_LIMIT_ENABLED",
     "RATE_LIMIT_MAX_REQUESTS",

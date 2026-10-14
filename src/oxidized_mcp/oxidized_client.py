@@ -14,6 +14,7 @@ from oxidized_mcp.utils import env_str
 from oxidized_mcp.utils import http_host_from_env
 from oxidized_mcp.utils import http_port_from_env
 from oxidized_mcp.utils import quote_path_segment
+from oxidized_mcp.utils import redact_url_credentials
 from oxidized_mcp.utils import transport_from_env
 
 logger = logging.getLogger(__name__)
@@ -61,7 +62,10 @@ def _annotate_with_response_body(
     body = exc.response.text.strip()
     if len(body) > _MAX_ERROR_BODY_LENGTH:
         body = body[:_MAX_ERROR_BODY_LENGTH] + "... (truncated)"
-    message = str(exc)
+    # httpx2 puts the full request URL in the message, including any
+    # user:password@ from OXIDIZED_URL; the message reaches MCP clients/Sentry.
+    url = str(exc.request.url)
+    message = str(exc).replace(url, redact_url_credentials(url))
     if hint:
         message = f"{message} | {hint}"
     if body:
@@ -152,12 +156,29 @@ class OxidizedClient:
         """Initialize the OxidizedClient."""
         self.config = config
         self.base_url = config.oxidized_url.rstrip("/")
+        # Credentials embedded in OXIDIZED_URL (user:password@) are moved into
+        # Basic auth: left in the URL, httpx2 would print them in every
+        # "HTTP Request" log line and error message (logs can reach Sentry).
+        self._url_auth: tuple[str, str] | None = None
+        try:
+            url = httpx2.URL(self.base_url)
+        except httpx2.InvalidURL:
+            url = None
+        # A password-only userinfo (":secret@") must be moved out too.
+        if url is not None and (url.username or url.password):
+            self._url_auth = (url.username, url.password)
+            self.base_url = str(url.copy_with(userinfo=b""))
         self.client: httpx2.AsyncClient | None = None
 
     def build_auth(self) -> httpx2.BasicAuth | None:
-        """HTTP Basic auth for a reverse proxy in front of oxidized-web, if set."""
+        """HTTP Basic auth for a reverse proxy in front of oxidized-web, if set.
+
+        Explicit username/password settings win over credentials in the URL.
+        """
         if self.config.username and self.config.password:
             return httpx2.BasicAuth(self.config.username, self.config.password)
+        if self._url_auth is not None:
+            return httpx2.BasicAuth(*self._url_auth)
         return None
 
     async def __aenter__(self):
@@ -327,6 +348,33 @@ def get_oxidized_config_from_env() -> OxidizedConfig:
         )
     rate_limit_enabled = env_bool("RATE_LIMIT_ENABLED", default=False)
 
+    oxidized_url = env_str("OXIDIZED_URL") or ""
+    # httpx2 appends request paths after a base URL's query
+    # ("/?token=x/nodes.json"), so every call would reach the wrong route. The
+    # value is not echoed: the query is likely a token. Any "?" counts, even
+    # with an empty query ("http://host/?"): httpx2 keeps it and the request
+    # path still lands after it.
+    if "?" in oxidized_url.partition("#")[0]:
+        raise ValueError(
+            "OXIDIZED_URL must not contain a query string (?...); use "
+            "OXIDIZED_USERNAME/OXIDIZED_PASSWORD for authentication"
+        )
+    # Otherwise every tool call fails, and httpx2's own message quotes part of
+    # the URL ("Invalid port: 'pa'" for an unencoded "/" in "admin:pa/ss@"),
+    # which may be the password. Neither is echoed; "from None" keeps it out
+    # of the traceback too.
+    if oxidized_url:
+        try:
+            parsed = httpx2.URL(oxidized_url)
+        except httpx2.InvalidURL:
+            parsed = None
+        if parsed is None or parsed.scheme not in ("http", "https") or not parsed.host:
+            raise ValueError(
+                "OXIDIZED_URL must be an http:// or https:// URL with a host; "
+                "percent-encode special characters in a user name or password "
+                "(e.g. '/' as %2F) or use OXIDIZED_USERNAME/OXIDIZED_PASSWORD"
+            ) from None
+
     # Numeric settings of a disabled feature are not read at all: a leftover
     # value must not stop a server that never uses it, and OxidizedConfig's
     # own defaults then apply.
@@ -346,7 +394,7 @@ def get_oxidized_config_from_env() -> OxidizedConfig:
     return OxidizedConfig(
         # Whitespace-only counts as missing, so main() reports it instead of
         # every call failing with a confusing connection error.
-        oxidized_url=env_str("OXIDIZED_URL") or "",
+        oxidized_url=oxidized_url,
         username=env_str("OXIDIZED_USERNAME"),
         password=os.getenv("OXIDIZED_PASSWORD") or None,
         verify_ssl=env_bool("OXIDIZED_VERIFY_SSL", default=True),
