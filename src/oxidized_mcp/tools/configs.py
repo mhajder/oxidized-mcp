@@ -281,7 +281,7 @@ def register_configs_tools(mcp: FastMCP, config: OxidizedConfig) -> None:
                 (pending ones included). Nodes without a stored configuration
                 do not use it, so the search moves past them.
                 """
-                nonlocal next_index
+                nonlocal next_index, nodes_searched
                 while (
                     next_index < len(candidates)
                     and sum(not task.done() for _, task in pending) < _FETCH_CONCURRENCY
@@ -289,10 +289,17 @@ def register_configs_tools(mcp: FastMCP, config: OxidizedConfig) -> None:
                 ):
                     candidate = candidates[next_index]
                     next_index += 1
-                    name, node_group, _ = candidate
-                    task = asyncio.ensure_future(
-                        client.get_text(f"/node/fetch/{node_path(name, node_group)}")
-                    )
+                    name, node_group, full_name = candidate
+                    try:
+                        path = f"/node/fetch/{node_path(name, node_group)}"
+                    except ValueError as exc:
+                        # A group with an empty component ("a//sw1") cannot be
+                        # addressed; report it instead of failing the search,
+                        # and count it like any other node that failed.
+                        nodes_searched += 1
+                        errors.append({"full_name": full_name, "error": str(exc)})
+                        continue
+                    task = asyncio.ensure_future(client.get_text(path))
                     pending.append((candidate, task))
 
             try:

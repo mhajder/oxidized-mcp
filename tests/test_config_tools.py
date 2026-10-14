@@ -402,3 +402,50 @@ async def test_search_configs_rejects_invalid_regex(server):
     with pytest.raises(Exception, match="Invalid regular expression"):
         await call(mcp, "search_configs", {"pattern": "("})
     assert requests == []
+
+
+@pytest.mark.asyncio
+async def test_search_configs_reports_an_unaddressable_node(make_server):
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        if request.url.path == "/nodes/conf_search.json":
+            return httpx2.Response(
+                200,
+                json=[
+                    # Group "a/" has an empty component and cannot be put in a path.
+                    {"node": "sw1", "full_name": "a//sw1"},
+                    {"node": "sw1", "full_name": "core/sw1"},
+                ],
+            )
+        return config_handler(request)
+
+    mcp, requests = make_server(handler)
+    result = await call(mcp, "search_configs", {"pattern": "hostname"})
+    assert [r["full_name"] for r in result["results"]] == ["core/sw1"]
+    assert [e["full_name"] for e in result["errors"]] == ["a//sw1"]
+    # Counted like a node whose fetch failed.
+    assert result["nodes_searched"] == 2
+    assert [r.url.path for r in requests] == [
+        "/nodes/conf_search.json",
+        "/node/fetch/core/sw1",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_search_configs_unaddressable_node_uses_the_node_budget(make_server):
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        if request.url.path == "/nodes/conf_search.json":
+            return httpx2.Response(
+                200,
+                json=[
+                    {"node": "sw1", "full_name": "a//sw1"},
+                    {"node": "sw1", "full_name": "core/sw1"},
+                ],
+            )
+        return config_handler(request)
+
+    mcp, requests = make_server(handler)
+    result = await call(mcp, "search_configs", {"pattern": "hostname", "max_nodes": 1})
+    assert result["nodes_searched"] == 1
+    assert result["results"] == []
+    assert result["truncated"] is True
+    assert [r.url.path for r in requests] == ["/nodes/conf_search.json"]
