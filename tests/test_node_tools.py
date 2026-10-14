@@ -123,6 +123,17 @@ async def test_list_nodes_filters(server, arguments, expected):
             "/nodes/group/core.json",
             ["core-sw02"],
         ),
+        # A blank model is no filter, with or without a group.
+        (
+            {"group": "core", "model": " "},
+            "/nodes/group/core.json",
+            ["core-sw01", "core-sw02"],
+        ),
+        (
+            {"model": " "},
+            "/nodes.json",
+            ["core-sw01", "core-sw02", "edge-rtr01", "new-sw"],
+        ),
     ],
 )
 async def test_list_nodes_filters_on_the_server(
@@ -133,6 +144,43 @@ async def test_list_nodes_filters_on_the_server(
     # Only the matching nodes are transferred - no /nodes.json request.
     assert [r.url.path for r in requests] == [expected_path]
     assert [n["name"] for n in result["nodes"]] == expected_names
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        # A blank status is no filter, like a blank group or model.
+        ("", ["core-sw01", "core-sw02", "edge-rtr01", "new-sw"]),
+        ("  ", ["core-sw01", "core-sw02", "edge-rtr01", "new-sw"]),
+        (" success ", ["core-sw01", "edge-rtr01"]),
+    ],
+)
+async def test_list_nodes_normalizes_the_status_filter(server, status, expected):
+    mcp, _ = server
+    result = await call(mcp, "list_nodes", {"status": status})
+    assert [n["name"] for n in result["nodes"]] == expected
+
+
+@pytest.mark.asyncio
+async def test_node_without_status_counts_as_never_everywhere(make_server):
+    unrun = {**node("blank-sw", "access"), "status": None}
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        if request.url.path == "/nodes.json":
+            return httpx2.Response(200, json=[*NODES, unrun])
+        return nodes_handler(request)
+
+    mcp, _ = make_server(handler)
+    listed = await call(mcp, "list_nodes", {"status": "never"})
+    stats = await call(mcp, "get_backup_stats")
+    assert [n["name"] for n in listed["nodes"]] == ["new-sw", "blank-sw"]
+    assert [n["name"] for n in stats["never_backed_up"]] == ["new-sw", "blank-sw"]
+    # Results report the status the filter matched, not None.
+    assert listed["nodes"][1]["status"] == "never"
+    assert stats["never_backed_up"][1]["status"] == "never"
+    found = await call(mcp, "find_nodes", {"query": "blank"})
+    assert found["nodes"][0]["status"] == "never"
 
 
 @pytest.mark.asyncio

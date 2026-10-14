@@ -31,6 +31,11 @@ def _summary(node: dict[str, Any]) -> dict[str, Any]:
     return {field: node.get(field) for field in _SUMMARY_FIELDS}
 
 
+def _node_status(node: dict[str, Any]) -> str:
+    """A node's last-run status; a node without one has never run."""
+    return str(node.get("status") or _STATUS_NEVER)
+
+
 def _equals(value: Any, expected: str | None) -> bool:
     """Case-insensitive equality; a missing filter matches everything."""
     if expected is None:
@@ -79,9 +84,16 @@ async def _fetch_nodes(
         nodes = await client.get_json(path)
     if not isinstance(nodes, list):
         return []
-    if config.redact_node_vars:
-        return [redact_node_vars(node) for node in nodes if isinstance(node, dict)]
-    return [node for node in nodes if isinstance(node, dict)]
+    # Report a node without a status as "never", the status the filters and
+    # backup stats already treat it as.
+    return [
+        {
+            **(redact_node_vars(node) if config.redact_node_vars else node),
+            "status": _node_status(node),
+        }
+        for node in nodes
+        if isinstance(node, dict)
+    ]
 
 
 async def _fetch_nodes_by(
@@ -100,8 +112,8 @@ async def _fetch_nodes_by(
       ("ios"). Built-in names are mapped to their exact spelling first;
       unknown (custom) models are sent as given.
     """
-    if model:
-        model = canonical_model(model)
+    # A blank model is no filter, with or without a group.
+    model = canonical_model(model) if model and model.strip() else None
     if group and group.strip():
         nodes = await _fetch_nodes(config, ("group", group.strip()))
         # Same exact semantics as the server-side model filter below.
@@ -183,10 +195,12 @@ def register_nodes_tools(mcp: FastMCP, config: OxidizedConfig) -> None:
         """
         nodes = await _fetch_nodes_by(config, group, model)
         needle = name_contains.casefold() if name_contains else None
+        # A blank status is no filter, like a blank group or model.
+        status = (status or "").strip() or None
         matched = [
             node
             for node in nodes
-            if _equals(node.get("status"), status)
+            if _equals(node["status"], status)
             and (
                 needle is None
                 or any(
@@ -374,11 +388,11 @@ def register_nodes_tools(mcp: FastMCP, config: OxidizedConfig) -> None:
         stale: list[dict[str, Any]] = []
 
         for node in nodes:
-            status = str(node.get("status") or _STATUS_NEVER)
-            group = str(node.get("group") or "default")
+            status = node["status"]
+            node_group = str(node.get("group") or "default")
             status_counts[status] += 1
             model_counts[str(node.get("model") or "unknown")] += 1
-            groups.setdefault(group, Counter())[status] += 1
+            groups.setdefault(node_group, Counter())[status] += 1
 
             if status == _STATUS_NEVER:
                 never.append(_summary(node))
