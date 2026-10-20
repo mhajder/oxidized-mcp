@@ -1,10 +1,26 @@
+<div align="center">
+
 # Oxidized MCP Server
+
+**Let AI agents search, compare and back up network device configs stored in Oxidized**
+
+[![PyPI](https://img.shields.io/pypi/v/oxidized-mcp?logo=pypi&logoColor=white)](https://pypi.org/project/oxidized-mcp/)
+[![Python](https://img.shields.io/pypi/pyversions/oxidized-mcp?logo=python&logoColor=white)](https://pypi.org/project/oxidized-mcp/)
+[![License](https://img.shields.io/github/license/mhajder/oxidized-mcp)](https://github.com/mhajder/oxidized-mcp/blob/main/LICENSE)
+
+[![Pre-commit Checks](https://github.com/mhajder/oxidized-mcp/actions/workflows/pre-commit.yml/badge.svg)](https://github.com/mhajder/oxidized-mcp/actions/workflows/pre-commit.yml)
+[![Docker](https://img.shields.io/badge/ghcr.io-oxidized--mcp-2496ED?logo=docker&logoColor=white)](https://github.com/mhajder/oxidized-mcp/pkgs/container/oxidized-mcp)
+[![MCP Registry](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fregistry.modelcontextprotocol.io%2Fv0.1%2Fservers%2Fio.github.mhajder%252Foxidized-mcp%2Fversions%2Flatest&query=%24.server.version&label=MCP%20Registry&color=6E56CF)](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.mhajder%2Foxidized-mcp/versions/latest)
+
+[Installation](https://github.com/mhajder/oxidized-mcp#-installation) · [Tools](https://github.com/mhajder/oxidized-mcp#-available-tools) · [Configuration](https://github.com/mhajder/oxidized-mcp#-configuration) · [Security](https://github.com/mhajder/oxidized-mcp#-security--safety-features)
+
+</div>
 
 <!-- mcp-name: io.github.mhajder/oxidized-mcp -->
 
 Oxidized MCP Server is a Python-based Model Context Protocol (MCP) server that gives AI assistants access to [Oxidized](https://github.com/ytti/oxidized), the network device configuration backup tool. It talks to the [oxidized-web](https://github.com/ytti/oxidized-web) REST API to list devices, check backup health, read and search device configurations, browse and diff configuration history, and queue backups. It supports read-only mode, tag-based tool filtering, and bearer token authentication for HTTP transports.
 
-## Features
+## ✨ Features
 
 ### Core Features
 
@@ -34,7 +50,7 @@ Oxidized MCP Server is a Python-based Model Context Protocol (MCP) server that g
 - Tag-based tool filtering and an optional tool-search transform
 - Bearer token authentication for HTTP transports
 
-## Installation
+## 🚀 Installation
 
 ### Prerequisites
 
@@ -126,7 +142,7 @@ uv run ty check .
 uv run prek install
 ```
 
-## Configuration
+## 🔧 Configuration
 
 ### Environment Variables
 
@@ -270,7 +286,7 @@ When enabled, Sentry automatically captures:
 
 Sentry is completely optional. If you don't set `SENTRY_DSN`, the server will run normally without any Sentry integration, and no monitoring data will be collected.
 
-## Available Tools
+## 🧰 Available Tools
 
 ### Node Tools
 
@@ -299,7 +315,7 @@ Hidden when `READ_ONLY_MODE=true`.
 - `trigger_node_backup`: Queue an immediate backup of a device, optionally recording a commit message and author
 - `reload_nodes`: Reload the whole node list from its source (a per-node reload is deliberately not offered: oxidized-web's `/reload?node=X` replaces the entire in-memory node list with the matching nodes)
 
-## Security & Safety Features
+## 🔒 Security & Safety Features
 
 ### Read-Only Mode
 
@@ -457,7 +473,7 @@ The Docker image's `HEALTHCHECK` uses it:
 curl http://localhost:8000/health
 ```
 
-## Oxidized Notes
+## 📝 Oxidized Notes
 
 - **Version history** (`list_node_versions`, `get_node_version`, `diff_node_versions`) needs the `git` or `gitcrypt` output. With the `file` output Oxidized reports no versions.
 - **Groups**: node names should be unique. Tools accept an optional `group` to disambiguate; `get_node_config` and the history tools look the group up automatically when it is omitted (with the git output's `single_repo` the group is part of the stored path, so it is required by oxidized-web). Nodes without a group are shown as group `default`, and passing `default` back is treated as "no group". `search_configs` filters groups the same way as `list_nodes` (exact match). `trigger_node_backup` takes no group because Oxidized queues backups by node name or IP only.
@@ -466,7 +482,7 @@ curl http://localhost:8000/health
 - **Backups are asynchronous**: `trigger_node_backup` moves the device to the head of the queue. Check `get_node` for the result.
 - **Errors**: oxidized-web answers unknown node names with HTTP 500. When it runs with `RACK_ENV=production` the reason is hidden, so a 500 on a node route is reported with a hint that it may be an unknown node name.
 
-## Using Docker
+## 🐳 Using Docker
 
 A Docker image is available on GitHub Packages for easy deployment.
 
@@ -481,16 +497,12 @@ docker run --rm -p 8000:8000 \
 
 The image defaults to the HTTP Streamable transport on port 8000 (`http://localhost:8000/mcp`).
 
-## Contributing
+## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Run tests and ensure code quality (`uv run pytest && uv run ruff check .`)
-5. Commit your changes (`git commit -m 'Add amazing feature'`)
-6. Push to the branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
+Contributions are welcome. See [CONTRIBUTING.md](https://github.com/mhajder/oxidized-mcp/blob/main/CONTRIBUTING.md) for the dev setup, checks and commit message format, and use the [issue templates](https://github.com/mhajder/oxidized-mcp/issues/new/choose) for bugs and feature requests.
 
-## License
+Found a security problem? Please report it privately as described in [SECURITY.md](https://github.com/mhajder/oxidized-mcp/blob/main/SECURITY.md).
 
-MIT License - see LICENSE file for details.
+## 📜 License
+
+MIT License - see [LICENSE](https://github.com/mhajder/oxidized-mcp/blob/main/LICENSE) for details.
