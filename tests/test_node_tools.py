@@ -409,3 +409,17 @@ def test_password_only_url_credentials_are_moved_into_basic_auth():
     client = OxidizedClient(OxidizedConfig(oxidized_url="http://:s3cret@oxidized"))
     assert "s3cret" not in client.base_url
     assert client.build_auth() is not None
+
+
+@pytest.mark.asyncio
+async def test_list_nodes_treats_a_non_list_response_as_empty(make_server):
+    mcp, _ = make_server(lambda _request: httpx2.Response(200, json={"error": "x"}))
+    result = await call(mcp, "list_nodes")
+    assert result["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_get_node_can_skip_redaction(make_server):
+    mcp, _ = make_server(nodes_handler, redact_node_vars=False)
+    result = await call(mcp, "get_node", {"node": "core-sw01"})
+    assert result["vars"]["password"] == "s3cret"

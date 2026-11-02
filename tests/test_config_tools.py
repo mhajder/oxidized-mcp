@@ -449,3 +449,39 @@ async def test_search_configs_unaddressable_node_uses_the_node_budget(make_serve
     assert result["results"] == []
     assert result["truncated"] is True
     assert [r.url.path for r in requests] == ["/nodes/conf_search.json"]
+
+
+@pytest.mark.asyncio
+async def test_search_configs_passes_other_http_errors_through(make_server):
+    mcp, _ = make_server(lambda _request: httpx2.Response(403, text="forbidden"))
+    with pytest.raises(Exception, match="403") as exc:
+        await call(mcp, "search_configs", {"pattern": "hostname"})
+    assert "Ruby regular expression" not in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_search_configs_skips_malformed_search_results(make_server):
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        if request.url.path == "/nodes/conf_search.json":
+            return httpx2.Response(
+                200, json=["garbage", {"node": "sw1", "full_name": "core/sw1"}]
+            )
+        return config_handler(request)
+
+    mcp, requests = make_server(handler)
+    result = await call(mcp, "search_configs", {"pattern": "hostname"})
+    assert [r.url.path for r in requests] == [
+        "/nodes/conf_search.json",
+        "/node/fetch/core/sw1",
+    ]
+    assert [n["full_name"] for n in result["results"]] == ["core/sw1"]
+
+
+def test_grep_reports_matches_beyond_the_limit():
+    import re
+
+    from oxidized_mcp.tools.configs import _grep
+
+    matches, truncated = _grep("a\nb\na\na\n", re.compile("a"), 0, limit=2)
+    assert [m["line_number"] for m in matches] == [1, 3]
+    assert truncated is True

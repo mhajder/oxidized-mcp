@@ -359,3 +359,57 @@ async def test_failed_version_fetch_is_not_cached(make_server):
     failing = False
     result = await call(mcp, "diff_node_versions", {"node": "sw1"})
     assert result["lines_added"] == 1
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_oid_prefix_is_rejected(make_server):
+    twins = [
+        {**VERSIONS[0], "oid": "abcd" + "1" * 36},
+        {**VERSIONS[1], "oid": "abcd" + "2" * 36},
+    ]
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        if request.url.path == "/node/version.json":
+            return httpx2.Response(200, json=twins)
+        return version_handler(request)
+
+    mcp, _ = make_server(handler)
+    with pytest.raises(Exception, match="ambiguous \\(2 matches\\)"):
+        await call(mcp, "get_node_version", {"node": "sw1", "oid": "abcd"})
+
+
+@pytest.mark.asyncio
+async def test_non_list_version_history_is_empty(make_server):
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        if request.url.path == "/node/version.json":
+            return httpx2.Response(200, json={"unexpected": True})
+        return version_handler(request)
+
+    mcp, _ = make_server(handler)
+    result = await call(mcp, "list_node_versions", {"node": "sw1"})
+    assert result["total_versions"] == 0
+    assert result["versions"] == []
+
+
+@pytest.mark.asyncio
+async def test_diff_cache_evicts_the_oldest_entry(server):
+    from oxidized_mcp.tools.versions import _DIFF_CACHE_SIZE
+
+    mcp, requests = server
+    arguments = {"node": "sw1", "oid": "cccc", "base_oid": "aaaa"}
+
+    def view_count():
+        return sum(r.url.path == "/node/version/view" for r in requests)
+
+    # context_lines is part of the cache key, so each value is a new entry.
+    for context in range(_DIFF_CACHE_SIZE + 1):
+        await call(mcp, "diff_node_versions", {**arguments, "context_lines": context})
+    fetched = view_count()
+
+    # The newest entry is still cached; the first one was evicted.
+    await call(
+        mcp, "diff_node_versions", {**arguments, "context_lines": _DIFF_CACHE_SIZE}
+    )
+    assert view_count() == fetched
+    await call(mcp, "diff_node_versions", {**arguments, "context_lines": 0})
+    assert view_count() == fetched + 2

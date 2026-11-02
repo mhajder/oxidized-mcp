@@ -77,3 +77,35 @@ def test_known_profile_lifecycle_does_not_warn(monkeypatch, caplog):
     monkeypatch.setenv("SENTRY_PROFILE_LIFECYCLE", "manual")
     init_sentry()
     assert "SENTRY_PROFILE_LIFECYCLE" not in caplog.text
+
+
+def test_missing_sentry_sdk_warns_and_stays_off(monkeypatch, caplog):
+    monkeypatch.setenv("SENTRY_DSN", "https://key@example.invalid/1")
+    # A None entry makes the import raise ImportError.
+    with patch.dict(sys.modules, {"sentry_sdk": None}):
+        assert init_sentry() is False
+    assert "Sentry SDK not installed" in caplog.text
+
+
+def test_explicit_release_is_used(fake_sentry, monkeypatch):
+    monkeypatch.setenv("SENTRY_RELEASE", "1.2.3")
+    init_sentry()
+    assert fake_sentry.call_args.kwargs["release"] == "1.2.3"
+
+
+def test_release_is_none_when_the_package_is_not_installed(fake_sentry, monkeypatch):
+    import importlib.metadata
+
+    def missing(_name):
+        raise importlib.metadata.PackageNotFoundError
+
+    monkeypatch.delenv("SENTRY_RELEASE", raising=False)
+    monkeypatch.setattr(importlib.metadata, "version", missing)
+    init_sentry()
+    assert fake_sentry.call_args.kwargs["release"] is None
+
+
+def test_init_failure_is_logged_not_raised(fake_sentry, caplog):
+    fake_sentry.side_effect = RuntimeError("bad dsn")
+    assert init_sentry() is False
+    assert "Failed to initialize Sentry: bad dsn" in caplog.text
