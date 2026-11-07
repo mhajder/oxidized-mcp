@@ -8,12 +8,12 @@
     "url": "https://github.com/mhajder/oxidized-mcp",
     "source": "github"
   },
-  "version": "0.2.1",
+  "version": "0.2.2",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "oxidized-mcp",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
@@ -132,7 +132,7 @@
     {
       "registryType": "pypi",
       "identifier": "oxidized-mcp",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "runtimeHint": "uvx",
       "transport": {
         "type": "streamable-http",
