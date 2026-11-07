@@ -1,15 +1,19 @@
 cff-version: 1.2.0
-message: "If you use this software, please cite it as below."
+message: If you use this software, please cite it as below.
 type: software
-title: "Oxidized MCP Server"
-abstract: "MCP server for Oxidized (network device config backup): list and filter devices, backup health stats, read and regex-search configs, git version history and diffs, trigger backups and node list reloads. Read-only mode and credential redaction."
+title: Oxidized MCP Server
+abstract: >-
+  MCP server for Oxidized (network device config backup): list and filter
+  devices, backup health stats, read and regex-search configs, git version
+  history and diffs, trigger backups and node list reloads. Read-only mode and
+  credential redaction.
 authors:
   - given-names: Mateusz
     family-names: Hajder
-repository-code: "https://github.com/mhajder/oxidized-mcp"
-url: "https://pypi.org/project/oxidized-mcp/"
+repository-code: https://github.com/mhajder/oxidized-mcp
+url: https://pypi.org/project/oxidized-mcp/
 license: MIT
-version: 0.2.1
+version: 0.2.2
 keywords:
   - mcp
   - mcp-server
