@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.3](https://github.com/mhajder/oxidized-mcp/compare/v0.2.2...v0.2.3) (2026-11-14)
+
+
+### 📦 Build
+
+* **deps:** bump dnspython from 2.9.0 to 2.9.2 ([#30](https://github.com/mhajder/oxidized-mcp/issues/30)) ([3c68d31](https://github.com/mhajder/oxidized-mcp/commit/3c68d314ac21d1219ff2e3a4f38e7a67c9e2375f))
+* **deps:** bump docker/login-action ([#23](https://github.com/mhajder/oxidized-mcp/issues/23)) ([adb9378](https://github.com/mhajder/oxidized-mcp/commit/adb9378daa12e370f319cccde43aa6bc6e25cc4f))
+* **deps:** bump opentelemetry-api from 1.45.1 to 1.45.2 ([#29](https://github.com/mhajder/oxidized-mcp/issues/29)) ([d56f132](https://github.com/mhajder/oxidized-mcp/commit/d56f132296f8a27a9844e9b7fda2e54a017ff30c))
+
 ## [0.2.2](https://github.com/mhajder/oxidized-mcp/compare/v0.2.1...v0.2.2) (2026-11-07)
 
 
