@@ -66,7 +66,7 @@ def hung_port(monkeypatch) -> Iterator[int]:
     The kernel completes the TCP handshake from the listen backlog, so a plain
     connect would call this healthy.
     """
-    monkeypatch.setattr(healthcheck, "PROBE_TIMEOUT_SECONDS", 0.3)
+    monkeypatch.setattr(healthcheck, "PROBE_TIMEOUT_SECONDS", 0.05)
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         sock.listen()
@@ -173,14 +173,17 @@ def _free_ports(count: int) -> list[int]:
 
 
 @pytest.fixture(scope="module")
-def real_servers(tmp_path_factory) -> Iterator[dict[str, tuple[subprocess.Popen, int]]]:
-    """Start a server for every REAL_SERVER_BEARER_TOKENS entry at once.
+def real_servers(
+    tmp_path_factory,
+) -> Iterator[tuple[dict[str, tuple[subprocess.Popen, int]], subprocess.Popen[str]]]:
+    """Start every REAL_SERVER_BEARER_TOKENS server and the bad-transport check at once.
 
     Each one spends about 1.5 s importing before it listens; started one test
     at a time, that wait was paid once per case.
     """
     ports = _free_ports(len(REAL_SERVER_BEARER_TOKENS))
     servers: dict[str, tuple[subprocess.Popen, int]] = {}
+    unknown_proc: subprocess.Popen[str] | None = None
     try:
         for bearer_token, port in zip(REAL_SERVER_BEARER_TOKENS, ports, strict=True):
             env = {
@@ -200,12 +203,34 @@ def real_servers(tmp_path_factory) -> Iterator[dict[str, tuple[subprocess.Popen,
                 stderr=subprocess.DEVNULL,
             )
             servers[bearer_token] = (server, port)
-        yield servers
+        unknown_env = {
+            **os.environ,
+            "OXIDIZED_URL": "https://oxidized.invalid",
+            "MCP_TRANSPORT": "websocket",
+            "SENTRY_DSN": "",
+        }
+        unknown_proc = subprocess.Popen(
+            [sys.executable, "-c", "import oxidized_mcp.server as s; s.main()"],
+            env=unknown_env,
+            cwd=tmp_path_factory.mktemp("unknown"),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        yield servers, unknown_proc
     finally:
         for server, _ in servers.values():
-            server.terminate()
+            server.kill()
+        if unknown_proc is not None and unknown_proc.poll() is None:
+            unknown_proc.kill()
         for server, _ in servers.values():
             server.wait(timeout=10)
+        if unknown_proc is not None:
+            unknown_proc.wait(timeout=10)
+            if unknown_proc.stdout is not None:
+                unknown_proc.stdout.close()
+            if unknown_proc.stderr is not None:
+                unknown_proc.stderr.close()
 
 
 @pytest.mark.parametrize("bearer_token", REAL_SERVER_BEARER_TOKENS)
@@ -213,7 +238,8 @@ def test_real_server_health_endpoint_needs_no_token(
     monkeypatch, real_servers, bearer_token
 ):
     """End to end: the server's /health answers the probe, bearer auth or not."""
-    server, port = real_servers[bearer_token]
+    servers, _ = real_servers
+    server, port = servers[bearer_token]
     _configure(monkeypatch, port)
     deadline = time.monotonic() + 30
     while healthcheck.main() != 0:
@@ -230,26 +256,13 @@ def test_real_server_health_endpoint_needs_no_token(
             conn.close()
 
 
-def test_unknown_transport_stops_the_server(tmp_path):
+def test_unknown_transport_stops_the_server(real_servers):
     """A typo must stop the server, not run stdio behind a closed port.
 
     The healthcheck skips non-HTTP transports, so a silent stdio fallback would
     also keep the container reported healthy.
     """
-    env = {
-        **os.environ,
-        "OXIDIZED_URL": "https://oxidized.invalid",
-        "MCP_TRANSPORT": "websocket",
-        "SENTRY_DSN": "",
-    }
-    proc = subprocess.run(
-        [sys.executable, "-c", "import oxidized_mcp.server as s; s.main()"],
-        env=env,
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        timeout=60,
-        check=False,
-    )
+    _, proc = real_servers
+    _, stderr = proc.communicate(timeout=60)
     assert proc.returncode == 1
-    assert "Unknown MCP_TRANSPORT 'websocket'" in proc.stderr
+    assert "Unknown MCP_TRANSPORT 'websocket'" in stderr
