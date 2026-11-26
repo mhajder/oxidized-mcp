@@ -1,6 +1,8 @@
 import ipaddress
 import logging
 import os
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version
 from typing import Any
 
 import httpx2
@@ -18,6 +20,13 @@ from oxidized_mcp.utils import redact_url_credentials
 from oxidized_mcp.utils import transport_from_env
 
 logger = logging.getLogger(__name__)
+
+try:
+    APP_VERSION = version("oxidized-mcp")
+except PackageNotFoundError:
+    APP_VERSION = "0.0.1"
+
+DEFAULT_USER_AGENT = f"oxidized-mcp/{APP_VERSION}"
 
 # Response bodies are attacker/server controlled and can be arbitrarily large
 # (e.g. an HTML error page from Sinatra or a misconfigured reverse proxy);
@@ -181,6 +190,9 @@ class OxidizedClient:
             return httpx2.BasicAuth(*self._url_auth)
         return None
 
+    def _user_agent(self) -> str:
+        return (self.config.user_agent or "").strip() or DEFAULT_USER_AGENT
+
     async def __aenter__(self):
         """Enter the async context manager."""
         if self.client is None:
@@ -189,6 +201,7 @@ class OxidizedClient:
                 timeout=self.config.timeout,
                 base_url=self.base_url,
                 auth=self.build_auth(),
+                headers={"User-Agent": self._user_agent()},
             )
         return self
 
@@ -399,6 +412,7 @@ def get_oxidized_config_from_env() -> OxidizedConfig:
         password=os.getenv("OXIDIZED_PASSWORD") or None,
         verify_ssl=env_bool("OXIDIZED_VERIFY_SSL", default=True),
         timeout=_env_setting("OXIDIZED_TIMEOUT", "timeout"),
+        user_agent=env_str("OXIDIZED_USER_AGENT"),
         search_timeout=_env_setting("OXIDIZED_SEARCH_TIMEOUT", "search_timeout"),
         redact_node_vars=env_bool("OXIDIZED_REDACT_NODE_VARS", default=True),
         read_only_mode=env_bool("READ_ONLY_MODE", default=False),

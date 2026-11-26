@@ -15,6 +15,10 @@ class OxidizedConfig(BaseModel):
     password: str | None = Field(None, description="HTTP Basic auth password")
     verify_ssl: bool = Field(True, description="Verify SSL (true/false)")
     timeout: int = Field(30, gt=0, description="Timeout in seconds")
+    user_agent: str | None = Field(
+        None,
+        description="User-Agent header sent upstream (unset = oxidized-mcp/<version>)",
+    )
     search_timeout: int = Field(
         300,
         gt=0,

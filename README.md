@@ -391,6 +391,7 @@ The server supports SSL certificate verification and custom timeout settings:
 ```env
 OXIDIZED_VERIFY_SSL=true    # Enable SSL certificate verification
 OXIDIZED_TIMEOUT=30         # Request timeout in seconds
+# OXIDIZED_USER_AGENT=      # Optional User-Agent header (default: oxidized-mcp/<version>)
 ```
 
 ### Upstream Authentication
