@@ -197,12 +197,19 @@ TOOL_SEARCH_MAX_RESULTS=5
 # SENTRY_DSN=https://your-key@o12345.ingest.us.sentry.io/6789
 # Optional Sentry configuration
 # SENTRY_TRACES_SAMPLE_RATE=1.0
+# true sends tool inputs and outputs (full device configurations including
+# secrets), incoming HTTP request bodies, stack frame variables, user details,
+# cookies and client IP headers to Sentry. Secret-looking variable names
+# (password, token, key) stay filtered, but secrets inside other values are not.
 # SENTRY_SEND_DEFAULT_PII=false
 # SENTRY_ENVIRONMENT=production
 # SENTRY_RELEASE=1.2.3
-# SENTRY_PROFILE_SESSION_SAMPLE_RATE=1.0
+# Profiling is off unless set (0.0-1.0)
+# SENTRY_PROFILE_SESSION_SAMPLE_RATE=0.0
+# Valid values: trace, manual
 # SENTRY_PROFILE_LIFECYCLE=trace
-# SENTRY_ENABLE_LOGS=true
+# Sentry Logs default to the PII setting; logged errors are always sent as events
+# SENTRY_ENABLE_LOGS=false
 
 # MCP Transport Configuration
 # Transport type: 'stdio' (default), 'sse' (Server-Sent Events), or 'http' (HTTP Streamable)
@@ -244,8 +251,11 @@ SENTRY_DSN=https://your-key@o12345.ingest.us.sentry.io/6789
 SENTRY_TRACES_SAMPLE_RATE=1.0
 
 # Optional: Include personally identifiable information (default: false).
-# Keep it off: with the MCP integration it records tool results, which are
-# full device configurations including secrets.
+# Keep it off: when true, tool inputs and outputs (full device configurations
+# including secrets), incoming HTTP request bodies, stack frame variables,
+# user details, cookies and client IP headers are sent to Sentry.
+# Secret-looking variable names (password, token, key) stay filtered, but
+# secrets inside other values, such as a fetched configuration, are not.
 SENTRY_SEND_DEFAULT_PII=false
 
 # Optional: Environment name (e.g., "production", "staging")
@@ -254,26 +264,36 @@ SENTRY_ENVIRONMENT=production
 # Optional: Release version (auto-detected from package if not set)
 SENTRY_RELEASE=1.2.2
 
-# Optional: Profiling - continuous profiling sample rate (0.0-1.0, default: 1.0)
-SENTRY_PROFILE_SESSION_SAMPLE_RATE=1.0
+# Optional: Profiling - continuous profiling sample rate (0.0-1.0, default: 0.0,
+# profiling off). Profiling adds CPU load and uses Sentry quota; set e.g. 1.0
+# to turn it on.
+SENTRY_PROFILE_SESSION_SAMPLE_RATE=0.0
 
 # Optional: Profiling - lifecycle mode for profiling (default: "trace")
-# Options: "all", "continuation", "trace"
+# Options: "trace" (profile while a sampled span is active), "manual"
+# (only between sentry_sdk.profiler.start_profiler() and stop_profiler())
 SENTRY_PROFILE_LIFECYCLE=trace
 
-# Optional: Enable log capture as breadcrumbs and events (default: true)
-SENTRY_ENABLE_LOGS=true
+# Optional: Send application logs to Sentry Logs (default: same as
+# SENTRY_SEND_DEFAULT_PII). Log lines can name nodes and groups.
+# Logged errors are always captured as events, and logs as breadcrumbs.
+SENTRY_ENABLE_LOGS=false
 ```
 
 #### Features
 
 When enabled, Sentry automatically captures:
 
-- **Exceptions & Errors**: All unhandled exceptions with full context
+- **Exceptions & Errors**: All unhandled exceptions with stack traces; local
+  variables only with `SENTRY_SEND_DEFAULT_PII=true` (secret-looking names
+  such as passwords and tokens are always filtered)
 - **Performance Metrics**: Request/response times and traces
-- **MCP Integration**: Detailed MCP server activity and interactions
-- **Logs & Breadcrumbs**: Application logs and event trails for debugging
-- **Context Data**: Environment, client info, and request parameters
+- **MCP Integration**: MCP server activity; tool inputs and outputs only with
+  `SENTRY_SEND_DEFAULT_PII=true`
+- **Logs & Breadcrumbs**: Event trails for debugging; application logs with
+  `SENTRY_ENABLE_LOGS=true` (default: same as `SENTRY_SEND_DEFAULT_PII`)
+- **Context Data**: Environment and release; client info and request
+  parameters only with `SENTRY_SEND_DEFAULT_PII=true`
 
 #### Getting a Sentry DSN
 
