@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.3.0](https://github.com/mhajder/oxidized-mcp/compare/v0.2.2...v0.3.0) (2026-11-28)
+
+
+### 🚀 Features
+
+* **client:** make outbound User-Agent configurable ([685f994](https://github.com/mhajder/oxidized-mcp/commit/685f9947cae8a41ff3424b389935516e5336dc76))
+
+
+### 🐛 Bug Fixes
+
+* **deps:** support sentry-sdk 3 ([e89b246](https://github.com/mhajder/oxidized-mcp/commit/e89b2462a830a91e4b33cb729aa7e2092c06bce6))
+
+
+### 📦 Build
+
+* **deps:** bump dnspython from 2.9.0 to 2.9.2 ([#30](https://github.com/mhajder/oxidized-mcp/issues/30)) ([3c68d31](https://github.com/mhajder/oxidized-mcp/commit/3c68d314ac21d1219ff2e3a4f38e7a67c9e2375f))
+* **deps:** bump docker/login-action ([#23](https://github.com/mhajder/oxidized-mcp/issues/23)) ([adb9378](https://github.com/mhajder/oxidized-mcp/commit/adb9378daa12e370f319cccde43aa6bc6e25cc4f))
+* **deps:** bump opentelemetry-api from 1.45.1 to 1.45.2 ([#29](https://github.com/mhajder/oxidized-mcp/issues/29)) ([d56f132](https://github.com/mhajder/oxidized-mcp/commit/d56f132296f8a27a9844e9b7fda2e54a017ff30c))
+* **deps:** bump the docker group across 1 directory with 2 updates ([#34](https://github.com/mhajder/oxidized-mcp/issues/34)) ([367ae2b](https://github.com/mhajder/oxidized-mcp/commit/367ae2bfece84929a7772a1bb8e0261d845dce2c))
+* **deps:** bump the uv-dependencies group across 1 directory with 3 updates ([#41](https://github.com/mhajder/oxidized-mcp/issues/41)) ([d383831](https://github.com/mhajder/oxidized-mcp/commit/d3838319d873a1a85f0d30bdb235d2cb39d92ecd))
+* **docker:** harden runtime image and precompile bytecode ([c0ef2da](https://github.com/mhajder/oxidized-mcp/commit/c0ef2da7fe99e880bd79811e814641a30ee93be0))
+
+
+### 🧪 Tests
+
+* optimize test suite runtime and scope pre-commit stages ([33521d7](https://github.com/mhajder/oxidized-mcp/commit/33521d71d750d31ee0f6c9bd59f58e035b8915a5))
+
 ## [0.2.2](https://github.com/mhajder/oxidized-mcp/compare/v0.2.1...v0.2.2) (2026-11-07)
 
 
